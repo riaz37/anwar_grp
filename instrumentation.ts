@@ -12,6 +12,9 @@
  *    as a separate deployable (documented tradeoff in that file's doc
  *    comment; BUILD_PLAN.md Sec 2.11 calls for a standalone worker
  *    process in production).
+ *  - Phase 4's overdue-evaluation-feedback reminder scheduler
+ *    (lib/reminder-scheduler.ts) — a BullMQ repeatable job, same
+ *    in-process-for-now tradeoff as the communication worker above.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -29,5 +32,10 @@ export async function register() {
       "./lib/communication-worker"
     );
     startCommunicationWorker();
+
+    const { startReminderScheduler } = await import(
+      "./lib/reminder-scheduler"
+    );
+    await startReminderScheduler();
   }
 }

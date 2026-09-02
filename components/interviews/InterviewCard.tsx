@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { InterviewStatusPill } from "@/components/ui/StatusPill";
+import { InterviewStatusPill, Pill } from "@/components/ui/StatusPill";
+import { panelFeedbackTone } from "@/components/ui/tone";
 import {
   CalendarIcon,
   ClockIcon,
@@ -17,6 +18,7 @@ import {
   formatTime,
 } from "@/lib/format";
 import type {
+  InterviewEvaluationRound,
   InterviewRescheduleEntry,
   InterviewRound,
   PersonRef,
@@ -60,11 +62,16 @@ function MetaRow({
 export function InterviewCard({
   interview,
   currentUser,
+  evaluation,
   onRescheduled,
   onEdit,
+  onOpenEvaluations,
 }: {
   interview: InterviewRound;
   currentUser: PersonRef;
+  /** Phase 4 feedback status for this round, when the caller has it. */
+  evaluation?: InterviewEvaluationRound;
+  onOpenEvaluations?: () => void;
   onRescheduled: (change: {
     toDate: string;
     toTime: string;
@@ -129,13 +136,33 @@ export function InterviewCard({
       {(interview.evaluationFormName || interview.candidateInstructions) && (
         <div className="mt-md flex flex-col gap-sm border-t border-border pt-md">
           {interview.evaluationFormName && (
-            <p className="text-body-sm text-muted">
-              <span className="font-medium text-text">Evaluation form:</span>{" "}
-              {interview.evaluationFormName}{" "}
-              <span className="text-muted">
-                — assigned for a later release; the form itself isn’t built yet.
-              </span>
-            </p>
+            <div className="flex flex-wrap items-center gap-sm">
+              <p className="text-body-sm text-muted">
+                <span className="font-medium text-text">Evaluation form:</span>{" "}
+                {interview.evaluationFormName}
+              </p>
+              {evaluation && (
+                <Pill
+                  tone={panelFeedbackTone(
+                    evaluation.submittedCount,
+                    evaluation.totalPanelists,
+                  )}
+                  label={`${evaluation.submittedCount} of ${evaluation.totalPanelists} panelists submitted`}
+                />
+              )}
+              {onOpenEvaluations && (
+                /* Ghost, not primary: on this tab the round's own actions
+                   (reschedule, edit) are the point, and this is a jump
+                   sideways to the Evaluations tab. */
+                <Button variant="ghost" onClick={onOpenEvaluations}>
+                  Open evaluations
+                  <span className="sr-only">
+                    {" "}
+                    for round {interview.roundNumber}
+                  </span>
+                </Button>
+              )}
+            </div>
           )}
           {interview.candidateInstructions && (
             <p className="max-w-[62ch] text-body-sm text-muted">

@@ -7,6 +7,7 @@ import { PlusIcon } from "@/components/ui/icons";
 import { formatDate, formatTime } from "@/lib/format";
 import type {
   EvaluationFormRef,
+  InterviewEvaluationRound,
   InterviewRound,
   PersonRef,
 } from "@/lib/types/domain";
@@ -35,6 +36,8 @@ export function InterviewsSection({
   panelMembers,
   evaluationForms,
   currentUser,
+  evaluationRounds,
+  onOpenEvaluations,
 }: {
   applicationId: string;
   interviews: InterviewRound[];
@@ -43,6 +46,11 @@ export function InterviewsSection({
   panelMembers: readonly (PersonRef & { role: string })[];
   evaluationForms: readonly EvaluationFormRef[];
   currentUser: PersonRef;
+  /** Phase 4: each round's feedback status, so a recruiter chasing evaluations
+   *  sees "2 of 3 submitted" on the round itself rather than having to switch
+   *  tabs to find out whether it is worth switching tabs. */
+  evaluationRounds?: readonly InterviewEvaluationRound[];
+  onOpenEvaluations?: (interviewId: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [announcement, setAnnouncement] = useState("");
@@ -148,6 +156,14 @@ export function InterviewsSection({
                 <InterviewCard
                   interview={round}
                   currentUser={currentUser}
+                  evaluation={evaluationRounds?.find(
+                    (entry) => entry.interviewId === round.id,
+                  )}
+                  onOpenEvaluations={
+                    onOpenEvaluations
+                      ? () => onOpenEvaluations(round.id)
+                      : undefined
+                  }
                   onEdit={() =>
                     setMode({ kind: "edit", interviewId: round.id })
                   }

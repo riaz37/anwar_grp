@@ -13,6 +13,7 @@ import type {
   ApplicationSummary,
   PersonRef,
   StageHistoryEntry,
+  Viewer,
 } from "@/lib/types/domain";
 
 /**
@@ -51,7 +52,9 @@ export function CandidateWorkspace({
   /** Reference data shared by every application's sections. */
   sectionsConfig: ApplicationSectionsConfig;
   people: readonly PersonRef[];
-  currentUser: PersonRef;
+  /** Widened from `PersonRef` in Phase 4 — the evaluation surface below is
+   *  role-conditional. See `ApplicationPanel`. */
+  currentUser: Viewer;
 }) {
   const [applications, setApplications] = useState(initialApplications);
   const [history, setHistory] = useState(initialHistory);
@@ -225,6 +228,7 @@ export function CandidateWorkspace({
                 detailByApplication[application.id] ?? {
                   screening: null,
                   interviews: [],
+                  evaluationRounds: [],
                   communications: [],
                   department: "—",
                   businessUnit: "—",

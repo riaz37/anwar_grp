@@ -119,3 +119,40 @@ wiring:**
 Phase 2 wiring item above (same kind of work, same reason it was
 deferred: two independently-built contracts need one deliberate
 reconciliation pass rather than three separate hasty ones).
+
+## Phase 4 frontend: wire mock data to the real API
+
+**What:** Same situation as Phases 2/3. Evaluation forms, the
+blind-until-submit panel-feedback gate, and the consolidated summary
+were built against typed mock data (`_mock-evaluations.ts`,
+`_evaluation-actions.ts`) with documented swap points. The real API
+(`/api/v1/interviews/:id/evaluations`, `.../evaluation-summary`,
+`/api/v1/evaluation-form-templates`, `/api/v1/reports/overdue-
+feedback`) exists and is independently verified, including the
+blind-until-submit query-layer rule.
+
+**Real contract gaps to resolve during that pass:**
+- Fixed already: the evaluation-summary route excluded `TECH_ADMIN`
+  (confidential scores per Sec 2.5) — frontend's stricter `SUMMARY_ROLES`
+  was right, backend's was loosened for now; done.
+- Mixed `scoreMax` within one evaluation-form template: the backend
+  takes a flat mean across all submitted scores regardless of each
+  criterion's max, which is meaningless if criteria don't share a
+  scale. Either constrain templates to one `scoreMax` at create time,
+  or normalize scores to a percentage before averaging in
+  `lib/reporting/evaluation-summary.ts`.
+- `EvaluationSummary`'s API shape returns flat `panelistId`/
+  `panelistName` fields; every other client type nests a `PersonRef` —
+  pick one convention (a one-line `.map()` in the fetch layer is the
+  cheap fix if the API stays as-is).
+- The summary doesn't carry the template's `scoreMax`, so a raw average
+  like "3.8" has no scale to display against — expose it or have the
+  client look up the template separately.
+- No `EVALUATION` document-download-authz checker registered yet
+  (same class of gap Phase 3 left for `SCREENING_ASSESSMENT` — also
+  still open) — evaluation-attached documents currently fail closed.
+
+**Depends on / blocked by:** Nothing — ready to pick up alongside the
+Phase 2/3 wiring items. Consider doing all three in one pass once
+Phase 5+ stabilizes further, since later phases may add their own
+mock-data layers on top of the same pattern.

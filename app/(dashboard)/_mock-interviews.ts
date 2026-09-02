@@ -89,7 +89,10 @@ const SEEDS: readonly InterviewSeed[] = [
     mode: "IN_PERSON",
     location: "Head office, Gulshan-1 — Meeting room 4B",
     onlineLink: null,
-    panelIds: ["usr_hm_1", "usr_panel_3"],
+    // Three panelists on purpose: this is the round `_mock-evaluations.ts`
+    // uses to exercise the blind-until-submit gate, and "2 of 3 submitted"
+    // is a more honest test of that copy than "1 of 2".
+    panelIds: ["usr_hm_1", "usr_panel_3", "usr_panel_4"],
     evaluationFormId: "evf_functional",
     candidateInstructions:
       "Please arrive 15 minutes early and bring a printed CV plus your NID. Ask for Talent Acquisition at reception.",
@@ -220,4 +223,15 @@ export function getMockInterviews(applicationId: string): InterviewRound[] {
   return SEEDS.filter((seed) => seed.applicationId === applicationId)
     .map(hydrate)
     .sort((a, b) => a.roundNumber - b.roundNumber);
+}
+
+/**
+ * One round by id — needed by the evaluation server actions, which know the
+ * interview but not the application it hangs off.
+ *
+ * SWAP POINT — GET /api/v1/interviews/{id} (the route already exists).
+ */
+export function getMockInterview(interviewId: string): InterviewRound | null {
+  const seed = SEEDS.find((entry) => entry.id === interviewId);
+  return seed ? hydrate(seed) : null;
 }

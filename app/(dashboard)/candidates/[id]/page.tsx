@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDate } from "@/lib/format";
 import {
   CANDIDATE_SOURCE_LABELS,
+  USER_ROLE_LABELS,
   type StageHistoryEntry,
 } from "@/lib/types/domain";
 import {
@@ -15,6 +16,7 @@ import {
   getMockStageHistory,
 } from "../../_mock-candidates";
 import { getMockCommunications, getMockTemplates } from "../../_mock-communications";
+import { getEvaluationRounds, resolveViewer } from "../../_mock-evaluations";
 import { getMockInterviews } from "../../_mock-interviews";
 import { getMockRequisition } from "../../_mock-requisitions";
 import { getMockScreening } from "../../_mock-screening";
@@ -50,8 +52,29 @@ export async function generateMetadata({
  */
 export default async function CandidateWorkspacePage({
   params,
+  searchParams,
 }: PageProps<"/candidates/[id]">) {
   const { id } = await params;
+
+  /* ────────────────────────────────────────────────────────────────────────
+   * DEV-ONLY viewer override — NOT A FEATURE. Remove with the mock data.
+   *
+   * The evaluation surface renders four genuinely different things depending
+   * on who is looking (own form / blind gate / unblinded panel feedback /
+   * consolidated results), and a single seeded session can only ever be one
+   * of them. `?as=<userId>` picks a mock viewer so all four are reachable
+   * while the real session is a stub; it is fenced behind NODE_ENV so it can
+   * never resolve in a production build, and nothing in the UI links to it.
+   *
+   * SWAP POINT — `const viewer = await requireSession()`; delete the override,
+   * the `searchParams` argument, `resolveViewer` and `MOCK_VIEWERS`.
+   * See `_mock-evaluations.ts` for the four demo URLs.
+   * ──────────────────────────────────────────────────────────────────────── */
+  const query = await searchParams;
+  const asParam = typeof query.as === "string" ? query.as : undefined;
+  const override =
+    process.env.NODE_ENV === "production" ? null : resolveViewer(asParam);
+  const viewer = override ?? MOCK_CURRENT_USER;
 
   // SWAP POINT — see `app/(dashboard)/_mock-candidates.ts`:
   //   const candidate = await fetchCandidate(id);   // GET /api/v1/candidates/{id}
@@ -86,11 +109,16 @@ export default async function CandidateWorkspacePage({
     Object.fromEntries(
       candidate.applications.map((application) => {
         const requisition = getMockRequisition(application.requisitionId);
+        const interviews = getMockInterviews(application.id);
         return [
           application.id,
           {
             screening: getMockScreening(application.id),
-            interviews: getMockInterviews(application.id),
+            interviews,
+            // Blind-until-submit is applied HERE, server-side, before the
+            // payload is serialized to the browser — never in a component.
+            // A blinded viewer's props contain no peer evaluation at all.
+            evaluationRounds: getEvaluationRounds(interviews, viewer),
             communications: getMockCommunications(application.id),
             department: requisition?.department.name ?? "—",
             businessUnit: requisition?.businessUnit.name ?? "—",
@@ -112,7 +140,7 @@ export default async function CandidateWorkspacePage({
       mobile: candidate.mobile,
     },
     recruiter: {
-      name: MOCK_CURRENT_USER.name,
+      name: viewer.name,
       email: MOCK_CURRENT_USER_CONTACT.email,
       mobile: MOCK_CURRENT_USER_CONTACT.mobile,
     },
@@ -138,13 +166,25 @@ export default async function CandidateWorkspacePage({
             beside it. */}
         <div className="min-w-0">
           <h2 className="sr-only">Applications</h2>
+          {override && (
+            /* DEV-ONLY, see the block at the top of this file. Rendered so a
+               screenshot of an impersonated view can never be mistaken for the
+               real one. */
+            <p className="mb-md rounded-sm border border-info-soft bg-info-soft px-md py-sm text-body-sm text-info-ink">
+              Development view — showing this workspace as{" "}
+              <strong className="font-semibold">{override.name}</strong> (
+              {USER_ROLE_LABELS[override.role]}). Remove{" "}
+              <code className="font-mono">?as=</code> from the URL to return to
+              the signed-in user.
+            </p>
+          )}
           <CandidateWorkspace
             applications={candidate.applications}
             historyByApplication={historyByApplication}
             detailByApplication={detailByApplication}
             sectionsConfig={sectionsConfig}
             people={people}
-            currentUser={MOCK_CURRENT_USER}
+            currentUser={viewer}
           />
         </div>
 

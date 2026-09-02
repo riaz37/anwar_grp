@@ -22,6 +22,8 @@ import type {
   EligibilityOutcome,
   EvaluatorRecommendation,
   InterviewStatus,
+  OverallRecommendation,
+  OwnEvaluationState,
   RequisitionStatus,
   ScreeningRecommendation,
 } from "@/lib/types/domain";
@@ -198,6 +200,73 @@ export const EVALUATOR_RECOMMENDATION_TONE: Record<
   BORDERLINE: "warning",
   NOT_RECOMMENDED: "error",
 };
+
+/**
+ * A panelist's overall recommendation → tone (spec Sec 6 > Interview
+ * Evaluation).
+ *
+ * Colour here describes a *human's stated position*, exactly as
+ * `EVALUATOR_RECOMMENDATION_TONE` above does for the assessment marker. It is
+ * never applied to an aggregate: the consolidated summary deliberately leaves
+ * its average score and its counts in plain text, because tinting an aggregate
+ * green would read as the system endorsing a hire — which spec Sec 6 forbids
+ * ("the system may summarize information but must not make the final hiring
+ * decision").
+ *
+ * STRONG_YES / YES  success — a positive position.
+ * NEUTRAL           info    — true, stated, and deliberately not actionable on
+ *                             its own. Not `warning`: the panelist owes nothing
+ *                             further, so nobody is being waited on.
+ * NO / STRONG_NO    error   — a negative position, same reading as
+ *                             NOT_RECOMMENDED above.
+ */
+export const OVERALL_RECOMMENDATION_TONE: Record<OverallRecommendation, Tone> =
+  {
+    STRONG_YES: "success",
+    YES: "success",
+    NEUTRAL: "info",
+    NO: "error",
+    STRONG_NO: "error",
+  };
+
+/**
+ * The viewer's own evaluation → tone.
+ *
+ * NOT_STARTED neutral — nothing exists yet; the work is signalled by the round
+ *                       card's own "feedback outstanding" status, not twice.
+ * DRAFT       warning — the round is waiting on *you*. DESIGN.md's warning is
+ *                       "waiting on somebody; time is passing", and a draft
+ *                       evaluation is the one case where that somebody is the
+ *                       person reading the screen.
+ * SUBMITTED   success — a good ending: locked, counted, and peer feedback
+ *                       unlocked.
+ */
+export const OWN_EVALUATION_STATE_TONE: Record<OwnEvaluationState, Tone> = {
+  NOT_STARTED: "neutral",
+  DRAFT: "warning",
+  SUBMITTED: "success",
+};
+
+/**
+ * Panel-feedback completeness → tone, as a function rather than a map because
+ * it is derived from two numbers.
+ *
+ * all submitted        success — the round's feedback is complete; nothing is
+ *                                blocking a decision.
+ * some/none submitted  warning — missing feedback is the spec's own named
+ *                                recruiter concern (Sec 6 > Decisions and
+ *                                Approvals) and Sec 8's "feedback overdue"
+ *                                dashboard tile. Somebody is being waited on.
+ * no panel assigned    neutral — nothing can be missing from an empty panel;
+ *                                that is a scheduling gap, not a feedback one.
+ */
+export function panelFeedbackTone(
+  submittedCount: number,
+  totalPanelists: number,
+): Tone {
+  if (totalPanelists === 0) return "neutral";
+  return submittedCount >= totalPanelists ? "success" : "warning";
+}
 
 /**
  * Stages rendered struck through: the application ended without a decision

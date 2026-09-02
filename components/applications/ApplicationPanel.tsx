@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CommunicationsSection } from "@/components/communications/CommunicationsSection";
+import { EvaluationsSection } from "@/components/evaluations/EvaluationsSection";
 import { InterviewsSection } from "@/components/interviews/InterviewsSection";
 import { ScreeningSection } from "@/components/screening/ScreeningSection";
 import {
@@ -10,39 +11,54 @@ import {
   type SectionTab,
 } from "@/components/ui/SectionTabs";
 import type { MessageContextInput } from "@/lib/communications/build-context";
+import { ownEvaluationState } from "@/lib/types/domain";
 import type {
   ApplicationStage,
   ApplicationSummary,
   Communication,
   EvaluationFormRef,
+  InterviewEvaluationRound,
   InterviewRound,
   MessageTemplate,
   PersonRef,
   ScreeningAssessment,
   StageHistoryEntry,
+  Viewer,
 } from "@/lib/types/domain";
 import { ApplicationOverview } from "./ApplicationOverview";
 
 /**
- * Everything about one application, as four sibling views rather than one
+ * Everything about one application, as five sibling views rather than one
  * page.
  *
- * Pipeline, Screening, Interviews and Messages are all answers to "what is the
- * state of this application" — they belong together, which is why they are
- * sections of the application rather than four places in the left-hand
- * navigation. Stacked vertically they run to six screens of scroll, so they
- * are disclosed as a second-level tab strip (see `components/ui/SectionTabs`
- * for why it looks nothing like the application strip above it).
+ * Pipeline, Screening, Interviews, Evaluations and Messages are all answers to
+ * "what is the state of this application" — they belong together, which is why
+ * they are sections of the application rather than five places in the
+ * left-hand navigation. Stacked vertically they run well past six screens of
+ * scroll, so they are disclosed as a second-level tab strip (see
+ * `components/ui/SectionTabs` for why it looks nothing like the application
+ * strip above it).
  *
  * The tab counts and the attention dot mean nothing is hidden by the
- * disclosure: a failed message or an unapproved draft is visible from the
- * Pipeline tab without opening Messages.
+ * disclosure: a failed message, an unapproved draft, or an evaluation this
+ * viewer personally owes is visible from the Pipeline tab without opening the
+ * section it belongs to.
+ *
+ * Evaluations sit beside Interviews rather than inside them (Phase 4): an
+ * evaluation belongs to a round, but the two are read by different people at
+ * different moments — a recruiter coordinating dates is not the panelist
+ * writing feedback — and nesting a second tab strip inside the Interviews tab
+ * would put three levels of tabs on one screen.
  */
 
-/** Everything the three new sections need, gathered per application. */
+/** Everything the four non-pipeline sections need, gathered per application. */
 export interface ApplicationDetail {
   screening: ScreeningAssessment | null;
   interviews: InterviewRound[];
+  /** One per interview round, already filtered for the viewer — see
+   *  `app/(dashboard)/_mock-evaluations.ts` on why the filtering happens
+   *  before this data reaches the client at all. */
+  evaluationRounds: InterviewEvaluationRound[];
   communications: Communication[];
   /** Requisition fields the application summary does not carry. */
   department: string;
@@ -72,7 +88,9 @@ export function ApplicationPanel({
   people: readonly PersonRef[];
   detail: ApplicationDetail;
   config: ApplicationSectionsConfig;
-  currentUser: PersonRef;
+  /** Widened from `PersonRef` in Phase 4: the evaluation surface is
+   *  role-conditional, and "who is looking" is now part of every read. */
+  currentUser: Viewer;
   onApplied: (change: {
     stage: ApplicationStage;
     nextAction: string;
@@ -96,11 +114,38 @@ export function ApplicationPanel({
    */
   const [screening, setScreening] = useState(detail.screening);
   const [interviews, setInterviews] = useState(detail.interviews);
+  const [evaluationRounds, setEvaluationRounds] = useState(
+    detail.evaluationRounds,
+  );
   const [communications, setCommunications] = useState(detail.communications);
+
+  /**
+   * Set only when the user jumps here from a round on the Interviews tab, so
+   * they land on that round rather than on the list. Cleared on any
+   * user-initiated tab change, so coming back to Evaluations later starts at
+   * the list again.
+   */
+  const [evaluationFocusId, setEvaluationFocusId] = useState<string | null>(
+    null,
+  );
 
   const needsAttention = communications.some(
     (message) =>
       message.status === "FAILED" || message.status === "AWAITING_APPROVAL",
+  );
+
+  /**
+   * The attention dot on Evaluations means one specific thing: *you* owe
+   * feedback on a round that has already happened. Deliberately not "somebody
+   * owes feedback" — that is the recruiter's dashboard's job (spec Sec 8,
+   * "Feedback overdue"), and a dot that fires for other people's outstanding
+   * work is a dot everyone learns to ignore.
+   */
+  const owesEvaluation = evaluationRounds.some(
+    (round) =>
+      round.viewerIsPanelist &&
+      round.status === "COMPLETED" &&
+      ownEvaluationState(round.own) !== "SUBMITTED",
   );
 
   const tabs: readonly SectionTab[] = [
@@ -116,6 +161,12 @@ export function ApplicationPanel({
       count: interviews.length,
     },
     {
+      id: "evaluations",
+      label: "Evaluations",
+      count: evaluationRounds.length,
+      attention: owesEvaluation,
+    },
+    {
       id: "messages",
       label: "Messages",
       count: communications.length,
@@ -123,12 +174,22 @@ export function ApplicationPanel({
     },
   ];
 
+  function openSection(id: string) {
+    setEvaluationFocusId(null);
+    setSection(id);
+  }
+
+  function openEvaluationsFor(interviewId: string) {
+    setEvaluationFocusId(interviewId);
+    setSection("evaluations");
+  }
+
   return (
     <div>
       <SectionTabs
         tabs={tabs}
         activeId={section}
-        onChange={setSection}
+        onChange={openSection}
         idPrefix={application.id}
         label={`Sections of the ${application.requisitionTitle} application`}
       />
@@ -170,6 +231,22 @@ export function ApplicationPanel({
           panelMembers={config.panelMembers}
           evaluationForms={config.evaluationForms}
           currentUser={currentUser}
+          evaluationRounds={evaluationRounds}
+          onOpenEvaluations={openEvaluationsFor}
+        />
+      </SectionTabPanel>
+
+      <SectionTabPanel
+        id="evaluations"
+        idPrefix={application.id}
+        active={section === "evaluations"}
+      >
+        <EvaluationsSection
+          rounds={evaluationRounds}
+          viewer={currentUser}
+          onChange={setEvaluationRounds}
+          initialRoundId={evaluationFocusId}
+          onOpenScreening={() => openSection("screening")}
         />
       </SectionTabPanel>
 

@@ -55,6 +55,29 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+/** Closed padlock — the blind-until-submit gate and the locked (submitted)
+ *  evaluation record. Never decorative: it only ever marks something the
+ *  viewer genuinely cannot open or change. */
+export function LockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+    </Icon>
+  );
+}
+
+/** Open padlock — used once, on the banner that announces peer feedback has
+ *  just been unlocked by the viewer's own submission. */
+export function UnlockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 6.9-.8" />
+    </Icon>
+  );
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -2,6 +2,8 @@ import type {
   EvaluationFormRef,
   OrgUnitRef,
   PersonRef,
+  UserRole,
+  Viewer,
 } from "@/lib/types/domain";
 
 /**
@@ -142,13 +144,51 @@ export const MOCK_EVALUATION_FORMS: readonly EvaluationFormRef[] = [
 ];
 
 /**
+ * Each mock person's *system* role (`prisma.Role`), as distinct from the
+ * display string on `MOCK_PANEL_MEMBERS` above ("Subject specialist" is a
+ * label a recruiter reads; `PANEL_MEMBER` is what authorization keys off).
+ *
+ * Phase 4 needs the real thing: the blind-until-submit rule applies to
+ * `PANEL_MEMBER` and to nobody else (`lib/evaluation-visibility.ts`), so a
+ * display label cannot stand in for it.
+ *
+ * SWAP POINT — the role arrives on each user from
+ * `GET /api/v1/users`, and for the signed-in user from `getSession()`.
+ */
+export const MOCK_SYSTEM_ROLES: Record<string, UserRole> = {
+  usr_hm_1: "HIRING_MANAGER",
+  usr_hm_2: "HIRING_MANAGER",
+  usr_hm_3: "HIRING_MANAGER",
+  usr_hm_4: "HIRING_MANAGER",
+  usr_hm_5: "HIRING_MANAGER",
+  usr_panel_1: "DEPT_HEAD",
+  usr_panel_2: "DEPT_HEAD",
+  usr_panel_3: "PANEL_MEMBER",
+  usr_panel_4: "PANEL_MEMBER",
+  usr_panel_5: "PANEL_MEMBER",
+  usr_recruiter_1: "RECRUITER",
+  usr_recruiter_2: "RECRUITER",
+  usr_recruiter_3: "RECRUITER",
+  usr_recruiter_4: "RECRUITER",
+};
+
+export function systemRoleOf(userId: string): UserRole {
+  return MOCK_SYSTEM_ROLES[userId] ?? "PANEL_MEMBER";
+}
+
+/**
  * Stand-in for the signed-in user. Real value comes from `getSession()` in a
  * server component — used here only so mock rows can render "You" as an
  * action owner consistently with `_mock-tasks.ts`.
+ *
+ * Carries `role` from Phase 4 onward: the evaluation surface is
+ * role-conditional (own-evaluation form vs. consolidated results), and a
+ * `PersonRef` cannot answer "may this viewer see the panel's feedback".
  */
-export const MOCK_CURRENT_USER: PersonRef = {
+export const MOCK_CURRENT_USER: Viewer = {
   id: "usr_recruiter_1",
   name: "Sadia Karim",
+  role: "RECRUITER",
 };
 
 /**

@@ -86,6 +86,10 @@ model User {
   communicationsDrafted       Communication[]              @relation("CommunicationDraftedBy")
   communicationsApproved      Communication[]              @relation("CommunicationApprovedBy")
 
+  // Phase 4 (Interview Evaluation + Feedback) relations.
+  evaluationFormTemplatesCreated EvaluationFormTemplate[] @relation("EvaluationFormTemplateCreatedBy")
+  evaluationsAsPanelist          Evaluation[]             @relation("EvaluationPanelist")
+
   @@map("users")
 }
 
@@ -415,6 +419,7 @@ model Interview {
 
   panelists         InterviewPanelist[]
   rescheduleHistory InterviewRescheduleHistory[]
+  evaluations       Evaluation[]
 
   @@index([applicationId])
   @@map("interviews")
@@ -548,4 +553,94 @@ enum CommunicationStatus {
   SENT
   DELIVERED
   FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 (Interview Evaluation + Feedback): BUILD_PLAN.md Sec 3.1 item 4.
+// Approval-chain-config and Joining are later phases — deliberately not
+// modeled here.
+// ---------------------------------------------------------------------------
+
+// Scored-criteria vs. free-text split (documented design decision — the
+// PDF's "Interview Evaluation" section lists a mix of scored criteria and
+// narrative fields without drawing this line itself):
+//   - EvaluationFormTemplate.criteria (scored, structured, varies by
+//     roleType so a form can be configured per role): relevant
+//     experience, technical/functional capability, communication,
+//     problem-solving, leadership. Each criterion is
+//     { key, label, description, scoreMax } and an Evaluation's `scores`
+//     JSON is a { [criterionKey]: number } map keyed against whichever
+//     template it was filled against.
+//   - Evaluation's own fixed narrative fields (NOT part of the
+//     configurable template, since the PDF lists these as constant
+//     across every evaluation regardless of role type): strengths,
+//     concerns, organizationalSuitability (all free text) and
+//     overallRecommendation (a fixed enum — see OverallRecommendation
+//     below). These never vary per roleType, unlike the scored criteria.
+//
+// `roleType` is kept as a plain String (not an enum) so TA_ADMIN/
+// TECH_ADMIN can introduce a new evaluation-form category (e.g.
+// "Sales", "Executive") as a data change, mirroring the
+// ApprovalChainConfig / MessageTemplate "configuration is a data change,
+// not a deploy" philosophy elsewhere in this schema.
+model EvaluationFormTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  roleType    String
+  // Json array of { key: string, label: string, description?: string,
+  // scoreMax: number } — validated by lib/evaluation-forms.ts at
+  // create/update time, not by a DB constraint.
+  criteria    Json
+  isActive    Boolean  @default(true)
+  createdById String
+  createdBy   User     @relation("EvaluationFormTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  evaluations Evaluation[]
+
+  @@index([roleType, isActive])
+  @@map("evaluation_form_templates")
+}
+
+// Values chosen to mirror a typical 5-point hiring-recommendation scale
+// used in the PDF's "overall recommendation" field — documented design
+// decision, not spelled out verbatim in the PDF.
+enum OverallRecommendation {
+  STRONG_YES
+  YES
+  NEUTRAL
+  NO
+  STRONG_NO
+}
+
+// One row per (interview, panelist) — a panelist's evaluation of one
+// interview round. `submittedAt` is the blind-until-submit lock point
+// (BUILD_PLAN.md Sec 2.3): null means still a draft the panelist can
+// freely edit; once set, the row is IMMUTABLE (enforced in the API
+// route, not a DB trigger — see app/api/v1/interviews/[id]/evaluations/
+// route.ts) and becomes visible to peer panelists per the rule in
+// lib/evaluation-visibility.ts.
+model Evaluation {
+  id                        String                 @id @default(cuid())
+  interviewId               String
+  interview                 Interview              @relation(fields: [interviewId], references: [id])
+  panelistId                String
+  panelist                  User                   @relation("EvaluationPanelist", fields: [panelistId], references: [id])
+  evaluationFormTemplateId  String
+  evaluationFormTemplate    EvaluationFormTemplate @relation(fields: [evaluationFormTemplateId], references: [id])
+  // { [criterionKey]: number } matching evaluationFormTemplate.criteria.
+  scores                    Json
+  strengths                 String?
+  concerns                  String?
+  organizationalSuitability String?
+  overallRecommendation     OverallRecommendation?
+  submittedAt               DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  @@unique([interviewId, panelistId])
+  @@index([interviewId])
+  @@index([panelistId])
+  @@map("evaluations")
 }

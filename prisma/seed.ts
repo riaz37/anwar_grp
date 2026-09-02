@@ -12,6 +12,14 @@ const SEED_RECRUITER_EMAIL = "recruiter@anwargroup.test";
 const SEED_RECRUITER_NAME = "Test Recruiter";
 const SEED_HIRING_MANAGER_EMAIL = "hiring.manager@anwargroup.test";
 const SEED_HIRING_MANAGER_NAME = "Test Hiring Manager";
+// Phase 4 (Evaluation & Feedback) needs at least two PANEL_MEMBER users
+// to exercise the blind-until-submit visibility rule (one panelist
+// can't see another's evaluation until their own is submitted) —
+// extending the existing seed rather than adding a separate seed file.
+const SEED_PANEL_MEMBER_1_EMAIL = "panelist1@anwargroup.test";
+const SEED_PANEL_MEMBER_1_NAME = "Test Panelist One";
+const SEED_PANEL_MEMBER_2_EMAIL = "panelist2@anwargroup.test";
+const SEED_PANEL_MEMBER_2_NAME = "Test Panelist Two";
 
 async function main() {
   const businessUnit = await prisma.businessUnit.upsert({
@@ -97,19 +105,61 @@ async function main() {
     },
   });
 
+  const panelist1 = await prisma.user.upsert({
+    where: { email: SEED_PANEL_MEMBER_1_EMAIL },
+    update: {
+      passwordHash,
+      role: Role.PANEL_MEMBER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+      isActive: true,
+    },
+    create: {
+      email: SEED_PANEL_MEMBER_1_EMAIL,
+      passwordHash,
+      name: SEED_PANEL_MEMBER_1_NAME,
+      role: Role.PANEL_MEMBER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+    },
+  });
+
+  const panelist2 = await prisma.user.upsert({
+    where: { email: SEED_PANEL_MEMBER_2_EMAIL },
+    update: {
+      passwordHash,
+      role: Role.PANEL_MEMBER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+      isActive: true,
+    },
+    create: {
+      email: SEED_PANEL_MEMBER_2_EMAIL,
+      passwordHash,
+      name: SEED_PANEL_MEMBER_2_NAME,
+      role: Role.PANEL_MEMBER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+    },
+  });
+
   console.log("Seed complete.");
   console.log("BusinessUnit:", businessUnit.name, businessUnit.id);
   console.log("Department:", department.name, department.id);
   console.log("TA_ADMIN user:", admin.email, admin.id);
   console.log("RECRUITER user:", recruiter.email, recruiter.id);
   console.log("HIRING_MANAGER user:", hiringManager.email, hiringManager.id);
+  console.log("PANEL_MEMBER user 1:", panelist1.email, panelist1.id);
+  console.log("PANEL_MEMBER user 2:", panelist2.email, panelist2.id);
   console.log("---");
   console.log("Seed admin login credentials (local dev only):");
   console.log("  email:   ", SEED_ADMIN_EMAIL);
   console.log("  password:", SEED_ADMIN_PASSWORD);
-  console.log("  (recruiter/hiring-manager seed accounts share this password)");
+  console.log("  (recruiter/hiring-manager/panelist seed accounts share this password)");
   console.log("  recruiter:      ", SEED_RECRUITER_EMAIL);
   console.log("  hiring manager: ", SEED_HIRING_MANAGER_EMAIL);
+  console.log("  panelist 1:     ", SEED_PANEL_MEMBER_1_EMAIL);
+  console.log("  panelist 2:     ", SEED_PANEL_MEMBER_2_EMAIL);
   console.log("---");
 }
 

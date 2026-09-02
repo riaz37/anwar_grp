@@ -601,3 +601,44 @@ attempt count, eligibility as an enum) worth resolving during that
 pass rather than now.
 
 Next: Phase 4 (Interview Evaluation + Feedback, Sec 3.1 item 4).
+
+---
+
+## Phase 4 status: backend + frontend complete, wiring pending (2026-09-02)
+
+Same pattern. Backend added `EvaluationFormTemplate`/`Evaluation`
+models, the blind-until-submit rule as a single query-layer helper
+(`lib/evaluation-visibility.ts` — a WHERE clause, not a post-fetch
+filter), a summary-only consolidated results view
+(`lib/reporting/evaluation-summary.ts` — deliberately no decision-
+derivation logic, per PDF's "must not make the final hiring
+decision"), overdue-feedback reporting, and a BullMQ repeatable-job
+reminder scheduler (15-minute cadence, scaffolding only — does not yet
+push through the Phase 3 communication pipeline, noted as a deferred
+follow-up). Frontend added a 5th application tab (Evaluations) with a
+template-driven scored form, a genuinely non-leaky blind-until-submit
+gate (a discriminated-union response shape with no field a peer
+evaluation could occupy while blind — verified against the raw RSC
+payload, not just visually), and a summary view that deliberately
+avoids any "system recommends" language or styling.
+
+This phase's agent pair was interrupted once by a session-wide rate
+limit partway through and resumed cleanly from the partial state (the
+schema, `lib/evaluation-forms.ts`, `lib/evaluation-visibility.ts`, and
+`lib/reporting/evaluation-summary.ts` survived the interruption
+untouched and were reused as-is by the resumed agent).
+
+One access-control fix made after both agents finished: the backend's
+`evaluation-summary` route originally allowed `TECH_ADMIN`; narrowed
+to exclude it per Sec 2.5 (evaluation scores are a confidential field
+that should stay hidden from Technical Administrators without an
+explicit break-glass grant, which doesn't exist until Phase 8) — the
+frontend agent's independently-chosen UI-side role list had already
+gotten this right and flagged the mismatch.
+
+Frontend mock-to-real wiring and a small set of contract gaps (mixed
+`scoreMax` averaging, `EvaluationSummary`'s flat vs. nested person
+fields, missing `EVALUATION` document-authz checker) tracked in
+`TODOS.md` alongside the Phase 2/3 items.
+
+Next: Phase 5 (Approval + Decision, Sec 3.1 item 5).

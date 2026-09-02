@@ -598,11 +598,296 @@ export interface InterviewRound {
   version: number;
 }
 
-/** Placeholder reference to a Phase 4 evaluation form. */
+/** Short reference to an evaluation form template, used by the scheduling
+ *  form's picker. The full template (with its criteria) is
+ *  `EvaluationFormTemplate` below. */
 export interface EvaluationFormRef {
   id: string;
   name: string;
   description: string;
+}
+
+/* ── Interview evaluation (spec Sec 6 > Interview Evaluation) ────────────── */
+
+/**
+ * Who is looking. The blind-until-submit rule and the consolidated-results
+ * view are both role-conditional, so every evaluation surface needs the
+ * viewer's role, not just their id.
+ *
+ * Mirrors `prisma.Role` exactly (Phase 1 schema).
+ */
+export const USER_ROLES = [
+  "TA_ADMIN",
+  "RECRUITER",
+  "DEPT_HEAD",
+  "HIRING_MANAGER",
+  "PANEL_MEMBER",
+  "HR_LEADERSHIP",
+  "AUDIT_USER",
+  "TECH_ADMIN",
+] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  TA_ADMIN: "TA administrator",
+  RECRUITER: "Recruiter",
+  DEPT_HEAD: "Department head",
+  HIRING_MANAGER: "Hiring manager",
+  PANEL_MEMBER: "Panel member",
+  HR_LEADERSHIP: "HR leadership",
+  AUDIT_USER: "Audit user",
+  TECH_ADMIN: "Technical administrator",
+};
+
+/** The signed-in user as every client component sees them. */
+export interface Viewer extends PersonRef {
+  role: UserRole;
+}
+
+/**
+ * One scored dimension on an evaluation form. Shape matches
+ * `lib/evaluation-forms.ts`'s `criterionSchema` field for field, so the mock
+ * templates below are swappable for `GET /api/v1/evaluation-forms` without
+ * a mapping layer.
+ */
+export interface EvaluationCriterion {
+  key: string;
+  label: string;
+  description?: string;
+  /** Top of the scale for this criterion; scales may differ per template. */
+  scoreMax: number;
+}
+
+/**
+ * "Evaluation forms should be configurable for different role types" (spec
+ * Sec 6 > Interview Evaluation). `criteria` is the configurable part; the four
+ * free-text/choice fields on an evaluation (organisational suitability,
+ * strengths, concerns, overall recommendation) are fixed by the spec and are
+ * therefore fields of `Evaluation`, not criteria — the same split
+ * `lib/evaluation-forms.ts` documents server-side.
+ */
+export interface EvaluationFormTemplate {
+  id: string;
+  name: string;
+  /** Free-text role type the template is configured for, e.g. "Technical". */
+  roleType: string;
+  criteria: EvaluationCriterion[];
+  isActive: boolean;
+}
+
+/**
+ * The spec's "Overall recommendation" as a closed five-point scale.
+ *
+ * RECONCILIATION NOTE — matches `prisma.OverallRecommendation` exactly. The
+ * PDF names the field but not its values; the backend picked this scale and
+ * documented it as a design decision, and this list follows it rather than
+ * inventing a second vocabulary.
+ */
+export const OVERALL_RECOMMENDATIONS = [
+  "STRONG_YES",
+  "YES",
+  "NEUTRAL",
+  "NO",
+  "STRONG_NO",
+] as const;
+
+export type OverallRecommendation = (typeof OVERALL_RECOMMENDATIONS)[number];
+
+export const OVERALL_RECOMMENDATION_LABELS: Record<
+  OverallRecommendation,
+  string
+> = {
+  STRONG_YES: "Strong yes",
+  YES: "Yes",
+  NEUTRAL: "Neutral",
+  NO: "No",
+  STRONG_NO: "Strong no",
+};
+
+/** Shown beside each option so five near-synonyms are actually separable. */
+export const OVERALL_RECOMMENDATION_MEANING: Record<
+  OverallRecommendation,
+  string
+> = {
+  STRONG_YES: "Would actively push to hire. No reservations worth raising.",
+  YES: "Would hire. Any concerns are manageable in the role.",
+  NEUTRAL: "Could go either way — the decision needs the rest of the panel.",
+  NO: "Would not hire for this role, on the evidence of this round.",
+  STRONG_NO: "A clear gap or risk that another round would not change.",
+};
+
+/**
+ * One panelist's evaluation of one interview round.
+ *
+ * `submittedAt` is the lock point: null means an editable draft, non-null
+ * means the record is immutable (server-enforced) and — for panel members —
+ * unlocks visibility of their peers' rows. The client mirrors both effects;
+ * it never *decides* either.
+ */
+export interface EvaluationRecord {
+  id: string;
+  interviewId: string;
+  panelist: PersonRef;
+  panelistRole: UserRole;
+  templateId: string;
+  templateName: string;
+  /** `{ [criterion.key]: score }`, only for criteria the panelist scored. */
+  scores: Record<string, number>;
+  organizationalSuitability: string;
+  strengths: string;
+  concerns: string;
+  overallRecommendation: OverallRecommendation | null;
+  /** ISO-8601 timestamp, or null while the record is still a draft. */
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Where the viewer's own evaluation stands, for status display. */
+export type OwnEvaluationState = "NOT_STARTED" | "DRAFT" | "SUBMITTED";
+
+export const OWN_EVALUATION_STATE_LABELS: Record<OwnEvaluationState, string> = {
+  NOT_STARTED: "Not started",
+  DRAFT: "Draft saved",
+  SUBMITTED: "Submitted",
+};
+
+/**
+ * Peer feedback for one round, as a discriminated union rather than a list
+ * plus a boolean flag.
+ *
+ * This is the client-side shape of the blind-until-submit rule
+ * (`lib/evaluation-visibility.ts`): in the `BLIND` variant there is no field
+ * that could hold a peer's evaluation, so a gated view cannot accidentally
+ * ship one to the browser — not hidden with CSS, not passed to a component
+ * that happens not to render it, not present in the serialized payload at all.
+ * The only thing `BLIND` carries is the count the spec permits
+ * ("N of M panelists have submitted").
+ */
+export type PanelFeedbackView =
+  | {
+      state: "BLIND";
+      submittedCount: number;
+      totalPanelists: number;
+    }
+  | {
+      state: "OPEN";
+      submittedCount: number;
+      totalPanelists: number;
+      /** Submitted peer evaluations only — drafts are never peer-visible. */
+      evaluations: EvaluationRecord[];
+      /** Assigned panelists with nothing submitted yet. */
+      awaiting: PersonRef[];
+    };
+
+/** One line of the consolidated "panel recommendations" list. */
+export interface PanelRecommendation {
+  panelist: PersonRef;
+  panelistRole: UserRole;
+  submittedAt: string | null;
+  overallRecommendation: OverallRecommendation | null;
+  /** Mean of this panelist's own scored criteria; null until submitted. */
+  averageScore: number | null;
+}
+
+/**
+ * Consolidated interview results (spec Sec 6 > Decisions and Approvals:
+ * "Recruiters should see: panel recommendations, average score, missing
+ * feedback, assessment results, key concerns, hiring-manager recommendation").
+ *
+ * A SUMMARY, never a verdict — the spec's own sentence is "the system may
+ * summarize information but must not make the final hiring decision", so
+ * nothing here (and nothing in the component that renders it) derives a
+ * hire/no-hire signal, ranks candidates, or styles a recommendation as the
+ * system's own.
+ *
+ * RECONCILIATION NOTE — `lib/reporting/evaluation-summary.ts` returns the same
+ * fields with split `panelistId`/`panelistName` pairs; this shape nests them as
+ * `PersonRef` like every other client type. One `.map()` in the fetch layer,
+ * or the route serializes into this shape.
+ *
+ * "Assessment results" is deliberately NOT duplicated here: it already lives on
+ * the Screening tab of the same application, and a second copy is a second
+ * thing to keep in sync. The summary panel links across to it instead.
+ */
+export interface EvaluationSummaryView {
+  interviewId: string;
+  totalPanelists: number;
+  submittedCount: number;
+  missingFeedback: PersonRef[];
+  panelRecommendations: PanelRecommendation[];
+  /** Mean across every submitted evaluation's scored criteria; null if none. */
+  averageScore: number | null;
+  /** The scale those scores are out of, so "3.6" is readable as "3.6 / 5". */
+  scoreMax: number | null;
+  keyConcerns: { panelist: PersonRef; concerns: string }[];
+  /** Called out by role for the recruiter view the spec asks for. Null when no
+   *  hiring manager sits on this panel, or they have not submitted. */
+  hiringManagerRecommendation: {
+    panelist: PersonRef;
+    recommendation: OverallRecommendation;
+  } | null;
+}
+
+/**
+ * Everything one interview round's evaluation surface renders, already
+ * filtered for the viewer.
+ *
+ * Every field is the *result* of a visibility decision made where the data is
+ * fetched (server-side with the real API; `_mock-evaluations.ts`'s single
+ * exported reader with mocks) — no component re-derives who may see what.
+ */
+export interface InterviewEvaluationRound {
+  interviewId: string;
+  roundNumber: number;
+  title: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  status: InterviewStatus;
+  /** Null when the round was scheduled without assigning a form. */
+  template: EvaluationFormTemplate | null;
+  totalPanelists: number;
+  submittedCount: number;
+  /** Whether the viewer sits on this panel — i.e. owes an evaluation. */
+  viewerIsPanelist: boolean;
+  /** The viewer's own evaluation. Null if they are not a panelist, or have
+   *  not started one. A panelist only ever edits this record. */
+  own: EvaluationRecord | null;
+  panelFeedback: PanelFeedbackView;
+  /** Null for viewers whose role does not receive the consolidated view. */
+  summary: EvaluationSummaryView | null;
+}
+
+/**
+ * What the panelist's form sends on save-draft and on submit. Identical body
+ * for both — the difference is which endpoint it goes to, because submitting
+ * is a state transition (lock + unblind + audit), not a field edit.
+ */
+export interface EvaluationDraftInput {
+  interviewId: string;
+  templateId: string;
+  scores: Record<string, number>;
+  organizationalSuitability: string;
+  strengths: string;
+  concerns: string;
+  overallRecommendation: OverallRecommendation | null;
+}
+
+export function ownEvaluationState(
+  own: EvaluationRecord | null,
+): OwnEvaluationState {
+  if (!own) return "NOT_STARTED";
+  return own.submittedAt ? "SUBMITTED" : "DRAFT";
+}
+
+/** Mean of a scores map, or null when nothing has been scored. */
+export function meanScore(scores: Record<string, number>): number | null {
+  const values = Object.values(scores).filter((value) =>
+    Number.isFinite(value),
+  );
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 /* ── Communication (spec Sec 6 > Communication, BUILD_PLAN Sec 2.8) ──────── */
