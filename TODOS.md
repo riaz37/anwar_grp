@@ -182,3 +182,61 @@ positionLevel` is a free `String` to match `Requisition.positionLevel`).
 
 **Depends on / blocked by:** Nothing — ready to pick up alongside the
 Phase 2/3/4 wiring items.
+
+## Phase 6 frontend: wire mock data to the real API, plus 8 flagged gaps
+
+**What:** Same situation as Phases 2-5. The Joining tab
+(`app/(dashboard)/_mock-joining.ts`, `_joining-actions.ts`) was built
+against typed mock data. The real API landed concurrently and every
+swap point is documented against the actual routes (not guessed) —
+`GET/POST /api/v1/applications/:id/joining-checklist`,
+`PATCH /api/v1/joining-checklist-items/:id`,
+`GET /api/v1/applications/:id/joining-readiness`.
+
+**Eight contract gaps, numbered in `_mock-joining.ts`'s own "CONTRACT
+GAPS" block — read that block directly, it's unusually specific:**
+1. No `blockedReason` column — a BLOCKED item's reason and its working
+   notes would collide in the single `notes` field. Recommended: add
+   `blockedReason String?`, required server-side when `status =
+   BLOCKED` (same rule already needed by `InterviewRescheduleHistory
+   .reason` and the approval-rejection comment).
+2. `dueDate` is never set by `buildDefaultChecklistItems()`, so all 13
+   auto-seeded items start dateless — making "overdue" (the tab's most
+   useful signal, and what Sec 8's "Joining actions" dashboard tile
+   counts) vacuously zero on every fresh checklist. Fix: seed due
+   dates from `Requisition.targetJoiningDate` using the offset table
+   already sitting in the frontend's `STANDARD_JOINING_CHECKLIST
+   .dueOffsetDays`.
+3. All 13 default items default to the assigned recruiter as owner;
+   6 of the PDF's own items (IT request, Workspace, ID card, Transport,
+   Offer letter, Induction) actually belong to IT/Admin/HR. The
+   frontend's fixture spreads them by function
+   (`STANDARD_JOINING_CHECKLIST.ownerFunction`) — the backend needs an
+   equivalent (a per-item default-role table, or resolve against the
+   department's users).
+4. Seeding only happens server-side on the stage transition INTO
+   JOINING; there's a real workflow reason to also expose it as an
+   idempotent standalone call (`POST .../joining-checklist/seed-
+   default`) so a recruiter can start chasing the offer letter while
+   the application still reads SELECTED.
+5. `JoiningReadinessSummary` (server) and the frontend's own
+   `JoiningReadiness` type already disagree: different field splits,
+   and the server compares `overdueCount` against an instant
+   (`new Date()`) while the frontend compares calendar dates — they'll
+   disagree for anything due today. Reconcile to one definition.
+6. No `completedById` column — "who ticked this off" is recoverable
+   from `AuditLog` but not from a list query, and on a checklist shared
+   across four departments that's a real disputed fact worth a column.
+7. Server status is 4-valued (PENDING/IN_PROGRESS/DONE/BLOCKED); the
+   frontend UI surfaces 3 and lossily maps IN_PROGRESS -> PENDING on
+   write-back, silently dropping the distinction on reopen. Either drop
+   IN_PROGRESS server-side or fix the mapper to preserve it.
+8. No DELETE for a checklist item and no "not applicable" status — an
+   inapplicable seeded item (e.g. "Transport" for a remote hire) can
+   currently only be closed out by marking it DONE, which corrupts the
+   completion count every readiness consumer reads.
+
+**Depends on / blocked by:** Nothing — ready to pick up alongside the
+Phase 2-5 wiring items. Gaps 1, 2, 5, and 7 are worth fixing before or
+during the wiring pass rather than after, since they affect data
+correctness (overdue counts, status fidelity) rather than just naming.

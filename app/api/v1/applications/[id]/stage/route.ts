@@ -7,6 +7,7 @@ import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 import { applicationScopeWhere } from "@/lib/phase2-scoping";
 import { isValidStageTransition } from "@/lib/application-stages";
+import { buildDefaultChecklistItems } from "@/lib/joining-checklist";
 
 const STAGE_CHANGE_ROLES: Role[] = [
   Role.TA_ADMIN,
@@ -34,6 +35,15 @@ const stageChangeSchema = z.object({
  * pipeline moves (lib/application-stages.ts), writes a StageHistory row
  * AND an audit log entry, and updates nextAction/nextActionOwnerId/
  * nextActionDueDate in the same call/transaction.
+ *
+ * Phase 6: also seeds the default joining checklist (the fixed 13-item
+ * PDF list, lib/joining-checklist.ts) the first time an application
+ * transitions INTO JOINING, if it has no checklist items yet — see the
+ * transaction body below. This was chosen over lazily seeding on first
+ * GET /joining-checklist so the checklist exists immediately once an
+ * application reaches JOINING, matching the PDF's "assign joining
+ * tasks" framing as something that happens as part of reaching that
+ * stage, not on-demand.
  */
 export async function PATCH(
   req: NextRequest,
@@ -94,6 +104,29 @@ export async function PATCH(
             notes: body.notes,
           },
         });
+
+        // Phase 6: seed the default joining checklist (PDF's fixed
+        // 13-item list, lib/joining-checklist.ts) the first time this
+        // application reaches JOINING — but only if it doesn't already
+        // have checklist items (e.g. a JOINING -> ON_HOLD -> JOINING
+        // loop shouldn't re-seed and duplicate items).
+        if (
+          body.toStage === ApplicationStage.JOINING &&
+          existing.currentStage !== ApplicationStage.JOINING
+        ) {
+          const existingItemCount = await tx.joiningChecklistItem.count({
+            where: { applicationId: application.id },
+          });
+          if (existingItemCount === 0) {
+            await tx.joiningChecklistItem.createMany({
+              data: buildDefaultChecklistItems({
+                applicationId: application.id,
+                defaultOwnerId: application.assignedRecruiterId,
+                createdById: user.userId,
+              }),
+            });
+          }
+        }
 
         return application;
       });

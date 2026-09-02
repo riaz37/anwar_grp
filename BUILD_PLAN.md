@@ -752,3 +752,117 @@ results" block is now also gated on `standalone`, and
 (200, no error digests) after the fix.
 
 Next: Phase 6 (Joining Coordination, Sec 3.1 item 6).
+
+---
+
+## Phase 6 status: backend + frontend complete, wiring pending (2026-09-02)
+
+Backend added
+the `JoiningChecklistItem` model + `JoiningChecklistItemStatus` enum,
+`lib/joining-checklist.ts`, `lib/reporting/joining-readiness.ts`,
+`lib/phase6-document-authz.ts`, and three new API routes.
+
+**Checklist field/status choice:** `applicationId`, `label`, `ownerId`
+(User), `dueDate` (nullable), `status`, `completedAt` (nullable,
+server-set), `documentId` (optional evidence, plain `String? @unique`
+matching the existing `Candidate.cvDocumentId`/
+`Requisition.erfRrfDocumentId` convention — no formal Prisma relation to
+`Document`), `notes`, `version` (optimistic lock, same as every other
+mutable resource), `createdById`, timestamps. **Status is a 4-value
+enum** (`PENDING` / `IN_PROGRESS` / `DONE` / `BLOCKED`), not just
+PENDING/DONE — chosen because Sec 8's Recruiter Dashboard lists both
+"Joining actions" and "Overdue tasks" as separate widgets, which implies
+a checklist item has a real lifecycle worth distinguishing
+(`IN_PROGRESS`) and a real "stuck" state (`BLOCKED`, e.g. reference
+check pending an external response) — still just one fixed enum reused
+identically for every item, not a workflow engine.
+
+**Default-seeding decision:** the PDF's 13-item list ("Candidate
+acceptance, Required documents, Reference check, Offer letter, Joining
+date, IT request, Workspace, ID card, Transport, Induction, Department
+notification, Joining completion, Departmental handover") is hardcoded
+verbatim in `lib/joining-checklist.ts`'s `DEFAULT_CHECKLIST_TEMPLATE`
+and auto-seeded **inside the existing `PATCH /applications/:id/stage`
+transaction** the first time an application transitions into
+`ApplicationStage.JOINING` (guarded so a `JOINING -> ON_HOLD -> JOINING`
+loop doesn't duplicate items). Chosen over lazy seeding on first
+`GET /joining-checklist` so the checklist exists immediately once an
+application reaches JOINING, matching the PDF's "assign joining tasks"
+framing as part of reaching that stage. Every seeded item defaults its
+owner to the application's `assignedRecruiterId` (documented judgment
+call — the schema has no per-item "responsible role" mapping); items
+can be reassigned via `PATCH` afterward, and ad hoc items beyond the
+fixed template can be added via `POST
+/applications/:id/joining-checklist`.
+
+**Readiness aggregation shape** (`getJoiningReadiness`, pure read, no
+side effects — same reporting-function style as Phase 4/5): `totalItems`,
+`completedCount`, `pendingCount`, `inProgressCount`, `blockedCount`,
+`overdueCount` + `overdueItems` (dueDate in the past AND status != DONE),
+`completionPercentage`, and `isReady` (true only when there is at least
+one item and every item is DONE). Unlike Phase 4's evaluation summary
+(which deliberately avoids any decision-derivation per the PDF's "must
+not make the final hiring decision"), a computed `isReady` boolean here
+is fine — checklist completion is a mechanical fact, not a judgment
+call about the candidate.
+
+**API routes:** `GET/POST /api/v1/applications/:id/joining-checklist`
+(GET — any org-wide/recruiter/dept-head/hiring-manager role in scope;
+POST — TA_ADMIN/RECRUITER/DEPT_HEAD/HIRING_MANAGER, adds one ad hoc item
+beyond the default set), `PATCH /api/v1/joining-checklist-items/:id`
+(same write roles, version-locked, moving `status` to `DONE` sets
+`completedAt` server-side and clears it if moved back off `DONE`, every
+update writes an audit log entry — `JOINING_CHECKLIST_ITEM_COMPLETE` vs
+`JOINING_CHECKLIST_ITEM_UPDATE`), `GET
+/api/v1/applications/:id/joining-readiness` (calls the aggregation
+function above).
+
+**Document authz:** `lib/phase6-document-authz.ts` registers the
+`JOINING_CHECKLIST_ITEM` checker (wired into `instrumentation.ts`
+alongside Phase 2/3's checkers), following the exact
+org-wide-roles-then-relationship-check pattern from
+`lib/phase3-document-authz.ts`. Ownership-id convention: evidence
+documents use `ownerId = <joiningChecklistItemId>` (not the
+applicationId, unlike Phase 3's `SCREENING_ASSESSMENT` convention) since
+there's no chicken-and-egg problem — the checklist item row always
+exists before evidence would be attached to it. The item's own `ownerId`
+(the responsible user) is also granted download access, in addition to
+the usual application-visibility roles, since the responsible user may
+not be the assigned recruiter.
+
+Verified live end-to-end on port 3111: created a throwaway requisition/
+candidate/application, drove it through every stage transition to
+JOINING and confirmed the default 13-item checklist was seeded exactly
+once with the PDF's exact labels; marked two items DONE and confirmed
+`completedAt` was set and an audit log row (`JOINING_CHECKLIST_ITEM_COMPLETE`)
+was written for each; set a third item's `dueDate` into the past without
+completing it; fetched `joining-readiness` and confirmed
+`totalItems=13, completedCount=2, overdueCount=1, isReady=false,
+completionPercentage≈0.1538`; confirmed a stale-version PATCH (version 1
+against a row already at version 2) was correctly rejected with 409
+`VERSION_CONFLICT`. All test rows (requisition, candidate, application,
+stage history, checklist items, audit logs) were cleaned up afterward.
+`npx tsc --noEmit` and `npm run build` both pass clean.
+
+Frontend added a 7th application tab ("Joining") with a fast-toggle
+checklist interaction (deliberately lighter-weight than the Communication-
+approval/Decision-approve ceremony — this is a routine operational
+checklist, not a compliance action), a readiness summary, and real
+document-upload wiring for per-item evidence. This agent run was cut off
+by a mid-session auth interruption right as it finished the mock file's
+final documentation block — verified after reconnecting that the file
+was actually complete (not mid-sentence), and that the full combined
+state (backend + frontend) typechecks, builds, and renders all three
+example applications' Joining tabs live with no console/render errors.
+
+The frontend agent's contract-gap analysis (`app/(dashboard)/_mock-
+joining.ts`'s "CONTRACT GAPS TO RESOLVE DURING THE WIRING PASS" block) is
+unusually actionable and worth reading directly rather than summarizing
+away — eight numbered gaps including a missing `blockedReason` column,
+`dueDate` never being seeded (making "overdue" vacuously zero on every
+fresh checklist), all 13 default items defaulting to the recruiter
+instead of being spread across IT/Admin/HR by function, two diverging
+definitions of the readiness-count shape, and no way to mark a seeded
+item not-applicable short of a false DONE. Tracked in TODOS.md.
+
+Next: Phase 7 (Management Dashboards, Sec 3.1 item 7).

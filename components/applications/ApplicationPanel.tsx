@@ -5,6 +5,7 @@ import { DecisionSection } from "@/components/approvals/DecisionSection";
 import { CommunicationsSection } from "@/components/communications/CommunicationsSection";
 import { EvaluationsSection } from "@/components/evaluations/EvaluationsSection";
 import { InterviewsSection } from "@/components/interviews/InterviewsSection";
+import { JoiningSection } from "@/components/joining/JoiningSection";
 import { ScreeningSection } from "@/components/screening/ScreeningSection";
 import {
   SectionTabPanel,
@@ -13,6 +14,11 @@ import {
 } from "@/components/ui/SectionTabs";
 import type { MessageContextInput } from "@/lib/communications/build-context";
 import { awaitingStep, type ApplicationApproval } from "@/lib/types/approvals";
+import {
+  isOverdue,
+  type ApplicationJoining,
+  type JoiningChecklistItem,
+} from "@/lib/types/joining";
 import { ownEvaluationState } from "@/lib/types/domain";
 import type {
   ApplicationStage,
@@ -31,10 +37,11 @@ import type {
 import { ApplicationOverview } from "./ApplicationOverview";
 
 /**
- * Everything about one application, as six sibling views rather than one
+ * Everything about one application, as seven sibling views rather than one
  * page.
  *
- * Pipeline, Screening, Interviews, Evaluations, Decision and Messages are all answers to
+ * Pipeline, Screening, Interviews, Evaluations, Decision, Messages and Joining
+ * are all answers to
  * "what is the state of this application" — they belong together, which is why
  * they are sections of the application rather than five places in the
  * left-hand navigation. Stacked vertically they run well past six screens of
@@ -60,6 +67,13 @@ import { ApplicationOverview } from "./ApplicationOverview";
  * we hire this person, and who has agreed" rather than "where is this
  * application" — and because the approval chain has an action on it for people
  * (department heads, HR leadership) who never touch the pipeline controls.
+ *
+ * Joining sits last (Phase 6) because it is the last thing that happens, and it
+ * is deliberately the lightest tab here: a checkbox list with an undo, not an
+ * approval. It is always rendered rather than gated on the JOINING stage — the
+ * same way Screening renders before anyone has screened — so the strip's
+ * membership never changes under the reader. See `JoiningSection` for the full
+ * argument.
  */
 
 /** Everything the five non-pipeline sections need, gathered per application. */
@@ -74,6 +88,8 @@ export interface ApplicationDetail {
   /** The approval chain and any request on it, already resolved for the viewer
    *  (Phase 5). Null when the application's requisition could not be read. */
   approval: ApplicationApproval | null;
+  /** The joining checklist plus the dates it is read against (Phase 6). */
+  joining: ApplicationJoining;
   /** Requisition fields the application summary does not carry. */
   department: string;
   businessUnit: string;
@@ -82,6 +98,9 @@ export interface ApplicationDetail {
 export interface ApplicationSectionsConfig {
   templates: readonly MessageTemplate[];
   panelMembers: readonly (PersonRef & { role: string })[];
+  /** Everyone who can own a joining checklist item — recruiting plus IT,
+   *  Administration and HR, who own half the spec's own list. */
+  joiningOwners: readonly (PersonRef & { role: string })[];
   evaluationForms: readonly EvaluationFormRef[];
   candidate: MessageContextInput["candidate"];
   recruiter: MessageContextInput["recruiter"];
@@ -137,6 +156,9 @@ export function ApplicationPanel({
     detail.evaluationRounds,
   );
   const [communications, setCommunications] = useState(detail.communications);
+  const [joiningItems, setJoiningItems] = useState<JoiningChecklistItem[]>(
+    detail.joining.items,
+  );
 
   /**
    * Set only when the user jumps here from a round on the Interviews tab, so
@@ -173,6 +195,21 @@ export function ApplicationPanel({
       round.viewerIsPanelist &&
       round.status === "COMPLETED" &&
       ownEvaluationState(round.own) !== "SUBMITTED",
+  );
+
+  /**
+   * The Joining dot follows the rule the Evaluations and Decision dots already
+   * set: it fires only when *this viewer* is the one holding something up — an
+   * item they own that is late or blocked. A dot that lit up for Administration's
+   * overdue ID card on every recruiter's screen would be a dot everyone learns
+   * to ignore, and chasing other people's joining items is the recruiter
+   * dashboard's job (spec Sec 8, "Joining actions").
+   */
+  const owesJoiningItem = joiningItems.some(
+    (item) =>
+      item.owner.id === currentUser.id &&
+      item.status !== "DONE" &&
+      (item.status === "BLOCKED" || isOverdue(item, detail.joining.today)),
   );
 
   const approvalRequest = detail.approval?.request ?? null;
@@ -217,6 +254,16 @@ export function ApplicationPanel({
       label: "Messages",
       count: communications.length,
       attention: needsAttention,
+    },
+    {
+      id: "joining",
+      /* Seventh and last, because it is the last thing that happens. Always
+         present rather than gated on the JOINING stage — see the header comment
+         on `JoiningSection` for why. `0` is a real answer here ("no checklist
+         started"), which is exactly what `SectionTab.count` renders. */
+      label: "Joining",
+      count: joiningItems.length,
+      attention: owesJoiningItem,
     },
   ];
 
@@ -343,6 +390,23 @@ export function ApplicationPanel({
             recruiter: config.recruiter,
             companyName: config.companyName,
           }}
+        />
+      </SectionTabPanel>
+
+      <SectionTabPanel
+        id="joining"
+        idPrefix={application.id}
+        active={section === "joining"}
+      >
+        <JoiningSection
+          applicationId={application.id}
+          stage={application.stage}
+          joining={detail.joining}
+          items={joiningItems}
+          owners={config.joiningOwners}
+          assignedRecruiter={application.assignedRecruiter}
+          viewerId={viewerId}
+          onChange={setJoiningItems}
         />
       </SectionTabPanel>
     </div>

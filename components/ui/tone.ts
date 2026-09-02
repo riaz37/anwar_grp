@@ -20,6 +20,7 @@ import type {
   ApprovalRequestStatus,
   ApprovalStepState,
 } from "@/lib/types/approvals";
+import type { JoiningItemStatus } from "@/lib/types/joining";
 import type {
   ApplicationStage,
   CommunicationStatus,
@@ -316,6 +317,63 @@ export const APPROVAL_STEP_STATE_TONE: Record<ApprovalStepState, Tone> = {
   NOT_REACHED: "neutral",
   HALTED: "neutral",
 };
+
+/**
+ * Joining checklist item status → tone (spec Sec 6 > Joining Coordination).
+ *
+ * PENDING neutral — outstanding, but nobody is late and nothing is stuck. The
+ *                   common state of most of the list on most days, and
+ *                   deliberately colourless: thirteen amber rows would make the
+ *                   two that genuinely need attention invisible.
+ * BLOCKED warning — waiting on somebody outside this checklist (IT, Admin,
+ *                   the candidate) and time is passing. Exactly DESIGN.md's
+ *                   warning definition, and the same reading `AWAITING` has in
+ *                   `APPROVAL_STEP_STATE_TONE`.
+ * DONE    success — a good ending.
+ *
+ * Note what is NOT here: overdue. Overdue is derived from the clock
+ * (`isOverdue()` in `lib/types/joining.ts`), and it is signalled on the row's
+ * *due date* — "4 days overdue" in warning ink — rather than by recolouring the
+ * status pill. One colour instance, one meaning: the pill says what state the
+ * work is in, the date says whether it is late. Recolouring the pill for a
+ * late-but-not-blocked item would collapse two independent facts into one
+ * signal and make "blocked" unreadable.
+ */
+export const JOINING_ITEM_STATUS_TONE: Record<JoiningItemStatus, Tone> = {
+  PENDING: "neutral",
+  BLOCKED: "warning",
+  DONE: "success",
+};
+
+/**
+ * Overall joining readiness → tone, as a function rather than a map because it
+ * is derived from four counts (`JoiningReadiness`).
+ *
+ * complete             success — every item ticked; nothing stands between this
+ *                                candidate and their start date.
+ * overdue or blocked   warning — somebody is being waited on and time is
+ *                                passing. Same definition the module's BLOCKED
+ *                                status uses, raised to the summary.
+ * work outstanding     accent  — live: this is where work is actually happening
+ *                                right now, which is DESIGN.md's accent meaning
+ *                                and the same reading live pipeline stages get.
+ * no items             neutral — no checklist has been started, so there is
+ *                                nothing to be on track or late for. An empty
+ *                                checklist is not a green one.
+ */
+export function joiningReadinessTone(readiness: {
+  total: number;
+  overdueCount: number;
+  blockedCount: number;
+  complete: boolean;
+}): Tone {
+  if (readiness.total === 0) return "neutral";
+  if (readiness.complete) return "success";
+  if (readiness.overdueCount > 0 || readiness.blockedCount > 0) {
+    return "warning";
+  }
+  return "accent";
+}
 
 /**
  * Stages rendered struck through: the application ended without a decision

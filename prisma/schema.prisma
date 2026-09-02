@@ -95,6 +95,10 @@ model User {
   approvalRequestsInitiated   ApprovalRequest[]     @relation("ApprovalRequestInitiatedBy")
   approvalDecisionsMade       ApprovalDecision[]    @relation("ApprovalDecisionDecidedBy")
 
+  // Phase 6 (Joining Coordination) relations.
+  joiningChecklistItemsOwned   JoiningChecklistItem[] @relation("JoiningChecklistItemOwner")
+  joiningChecklistItemsCreated JoiningChecklistItem[] @relation("JoiningChecklistItemCreatedBy")
+
   @@map("users")
 }
 
@@ -297,6 +301,9 @@ model Application {
 
   // Phase 5 relations.
   approvalRequests ApprovalRequest[]
+
+  // Phase 6 relations.
+  joiningChecklistItems JoiningChecklistItem[]
 
   @@index([assignedRecruiterId])
   @@index([currentStage])
@@ -802,4 +809,66 @@ model ApprovalDecision {
   @@unique([approvalRequestId, stepIndex])
   @@index([approvalRequestId])
   @@map("approval_decisions")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 (Joining Coordination): BUILD_PLAN.md Sec 3.1 item 6. PDF's
+// "Joining Coordination" section: "A simple checklist should cover:
+// Candidate acceptance, Required documents, Reference check, Offer
+// letter, Joining date, IT request, Workspace, ID card, Transport,
+// Induction, Department notification, Joining completion, Departmental
+// handover. Each item should have an owner, due date, status, and
+// optional evidence." Modeled exactly that literally — one row per
+// checklist item, per application.
+// ---------------------------------------------------------------------------
+
+// Deliberately 4 states, not just PENDING/DONE — "IN_PROGRESS" and
+// "BLOCKED" are the minimum extra vocabulary a coordination checklist
+// needs to be useful (Sec 8's Recruiter Dashboard lists both "Joining
+// actions" and "Overdue tasks", which implies items have a lifecycle,
+// not just a checkbox). Still deliberately NOT a generalized task-
+// workflow engine (BUILD_PLAN's exclusion list) — no sub-statuses, no
+// per-item custom transition rules, just this one fixed enum reused for
+// every item on every application.
+enum JoiningChecklistItemStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+// Per-application checklist row. Applications reach this once they hit
+// ApplicationStage.JOINING (lib/application-stages.ts) — a default set
+// of items (lib/joining-checklist.ts's DEFAULT_CHECKLIST_TEMPLATE,
+// taken verbatim from the PDF's list) is seeded automatically the first
+// time an application transitions into JOINING (see the stage route),
+// but ad hoc items can also be added/removed via the checklist API for
+// cases the fixed template doesn't cover.
+model JoiningChecklistItem {
+  id            String                      @id @default(cuid())
+  applicationId String
+  application   Application                 @relation(fields: [applicationId], references: [id])
+  label         String
+  ownerId       String
+  owner         User                        @relation("JoiningChecklistItemOwner", fields: [ownerId], references: [id])
+  dueDate       DateTime?
+  status        JoiningChecklistItemStatus  @default(PENDING)
+  completedAt   DateTime?
+  // Optional evidence document (e.g. signed offer letter, ID card
+  // photo). Stored as a plain id, not a Prisma relation, matching the
+  // existing convention (Candidate.cvDocumentId, Requisition.erfRrfDocumentId)
+  // — the Document row itself carries ownerType JOINING_CHECKLIST_ITEM /
+  // ownerId = this row's id for authz purposes (lib/phase6-document-authz.ts).
+  documentId    String?                     @unique
+  notes         String?
+  version       Int                         @default(1)
+  createdById   String
+  createdBy     User                        @relation("JoiningChecklistItemCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  @@index([applicationId])
+  @@index([ownerId, dueDate])
+  @@index([status])
+  @@map("joining_checklist_items")
 }

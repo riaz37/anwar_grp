@@ -5,12 +5,13 @@ import { CandidateWorkspace } from "@/components/candidates/CandidateWorkspace";
 import { DetailItem, DetailList } from "@/components/ui/DetailList";
 import { DocumentUpload } from "@/components/ui/DocumentUpload";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayIsoDate } from "@/lib/format";
 import {
   CANDIDATE_SOURCE_LABELS,
   USER_ROLE_LABELS,
   type StageHistoryEntry,
 } from "@/lib/types/domain";
+import type { ApplicationJoining } from "@/lib/types/joining";
 import { getApplicationApproval } from "../../_mock-approvals";
 import {
   getMockCandidate,
@@ -19,10 +20,12 @@ import {
 import { getMockCommunications, getMockTemplates } from "../../_mock-communications";
 import { getEvaluationRounds, resolveViewer } from "../../_mock-evaluations";
 import { getMockInterviews } from "../../_mock-interviews";
+import { getMockJoiningChecklist } from "../../_mock-joining";
 import { getMockRequisition } from "../../_mock-requisitions";
 import { getMockScreening } from "../../_mock-screening";
 import {
   MOCK_COMPANY_NAME,
+  MOCK_COORDINATORS,
   MOCK_CURRENT_USER,
   MOCK_CURRENT_USER_CONTACT,
   MOCK_EVALUATION_FORMS,
@@ -109,19 +112,46 @@ export default async function CandidateWorkspacePage({
   //     — both behind `getApplicationApproval`; see `_mock-approvals.ts` for
   //       the full contract, including which non-200s are expected states
   //       rather than failures.
+  //   GET /api/v1/applications/{id}/joining-checklist   ([] = not started yet)
+  //     — see `_mock-joining.ts`.
   // `department`/`businessUnit` come from the application's requisition
   // (GET /api/v1/requisitions/{id}); they are carried here because the message
   // templates interpolate them and `ApplicationSummary` does not hold them.
+
+  /* Resolved once, on the server, and threaded into every application's joining
+     bundle: "overdue" is the only clock-dependent thing the Joining tab renders,
+     and a server pass and a client rehydration that disagreed about today's date
+     would mismatch on exactly the rows that matter. */
+  const today = todayIsoDate();
+
   const detailByApplication: Record<string, ApplicationDetail> =
     Object.fromEntries(
       candidate.applications.map((application) => {
         const requisition = getMockRequisition(application.requisitionId);
         const interviews = getMockInterviews(application.id);
+        const joining: ApplicationJoining = {
+          items: getMockJoiningChecklist(application.id),
+          targetJoiningDate: requisition?.targetJoiningDate ?? null,
+          today,
+          /* Default owners for the standard checklist. With the real API these
+             resolve server-side from the requisition and the users table
+             (GET /api/v1/users?role=…); the point is that the seed hands IT's
+             items to IT rather than dumping thirteen rows on the recruiter. */
+          seedOwnerByFunction: {
+            RECRUITER: application.assignedRecruiter.id,
+            HIRING_MANAGER:
+              requisition?.hiringManager.id ?? application.assignedRecruiter.id,
+            IT: "usr_it_1",
+            ADMIN: "usr_admin_1",
+            HR: "usr_hr_1",
+          },
+        };
         return [
           application.id,
           {
             screening: getMockScreening(application.id),
             interviews,
+            joining,
             // Blind-until-submit is applied HERE, server-side, before the
             // payload is serialized to the browser — never in a component.
             // A blinded viewer's props contain no peer evaluation at all.
@@ -144,6 +174,17 @@ export default async function CandidateWorkspacePage({
   const sectionsConfig = {
     templates: getMockTemplates(),
     panelMembers: MOCK_PANEL_MEMBERS,
+    /* Joining reaches outside recruiting by design — IT, Administration and HR
+       own six of the spec's own thirteen items — so the owner picker is a
+       superset of the panel list, not the same list. */
+    joiningOwners: [
+      ...MOCK_RECRUITERS.map((person) => ({ ...person, role: "Recruiter" })),
+      ...MOCK_HIRING_MANAGERS.map((person) => ({
+        ...person,
+        role: "Hiring manager",
+      })),
+      ...MOCK_COORDINATORS,
+    ],
     evaluationForms: MOCK_EVALUATION_FORMS,
     candidate: {
       name: candidate.name,

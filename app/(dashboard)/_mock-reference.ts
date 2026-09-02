@@ -83,6 +83,28 @@ export const MOCK_APPROVERS: readonly PersonRef[] = [
 ];
 
 /**
+ * People outside Talent Acquisition who own joining-checklist items (Phase 6).
+ *
+ * The spec's own checklist hands work to functions TA does not run — "IT
+ * request", "Workspace", "ID card", "Transport" belong to IT and Administration,
+ * "Offer letter" and "Induction" to HR — so a checklist whose owner picker only
+ * offered recruiters and hiring managers would force every item onto the
+ * recruiter and quietly defeat the point of having an owner column at all.
+ *
+ * SWAP POINT — GET /api/v1/users (the owner picker is "anyone in the company",
+ * not a role-filtered list; joining coordination reaches outside recruiting by
+ * design). Disappears with the rest of the mock reference data.
+ */
+export const MOCK_COORDINATORS: readonly (PersonRef & { role: string })[] = [
+  { id: "usr_it_1", name: "Rakibul Islam", role: "Information Technology" },
+  { id: "usr_it_2", name: "Sumaiya Noor", role: "Information Technology" },
+  { id: "usr_admin_1", name: "Golam Kibria", role: "Administration" },
+  { id: "usr_admin_2", name: "Parvin Akhtar", role: "Administration" },
+  { id: "usr_hr_1", name: "Shamima Nasrin", role: "Human Resources" },
+  { id: "usr_hr_2", name: "Mizanur Rahman", role: "Human Resources" },
+];
+
+/**
  * People who can sit on an interview panel (spec Sec 6 > Interview Scheduling,
  * "Interview-panel assignment"; spec Sec 3 lists "Interview panel members" as
  * a primary user in their own right).
@@ -240,6 +262,7 @@ export function personById(id: string): PersonRef {
     MOCK_RECRUITERS.find((person) => person.id === id) ??
     MOCK_HIRING_MANAGERS.find((person) => person.id === id) ??
     MOCK_PANEL_MEMBERS.find((person) => person.id === id) ??
-    MOCK_APPROVERS.find((person) => person.id === id);
+    MOCK_APPROVERS.find((person) => person.id === id) ??
+    MOCK_COORDINATORS.find((person) => person.id === id);
   return match ? { id: match.id, name: match.name } : { id, name: "—" };
 }

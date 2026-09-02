@@ -7,6 +7,8 @@
  *    closed for any DocumentOwnerType with no checker registered.
  *  - Phase 3's SCREENING_ASSESSMENT checker (lib/phase3-document-authz.ts),
  *    same fail-closed reasoning.
+ *  - Phase 6's JOINING_CHECKLIST_ITEM checker (lib/phase6-document-authz.ts),
+ *    same fail-closed reasoning.
  *  - Phase 3's async communication-send worker
  *    (lib/communication-worker.ts) — started in-process here rather than
  *    as a separate deployable (documented tradeoff in that file's doc
@@ -27,6 +29,11 @@ export async function register() {
       "./lib/phase3-document-authz"
     );
     registerPhase3DocumentAuthzCheckers();
+
+    const { registerPhase6DocumentAuthzCheckers } = await import(
+      "./lib/phase6-document-authz"
+    );
+    registerPhase6DocumentAuthzCheckers();
 
     const { startCommunicationWorker } = await import(
       "./lib/communication-worker"

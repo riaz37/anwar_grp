@@ -26,6 +26,12 @@ const SEGMENT_BASE =
 const LABEL_VISIBILITY = {
   sm: "hidden truncate text-caption sm:block",
   lg: "hidden truncate text-caption lg:block",
+  /* Phase 6: a joining checklist runs to thirteen items with labels like
+     "Department notification", which truncate to two characters at any
+     breakpoint. The track still carries every label to screen readers via the
+     `sr-only` span below — this hides the visible labels only, and the list
+     underneath is where a sighted reader gets them. */
+  never: "hidden",
 } as const;
 
 export interface TrackSegment {
