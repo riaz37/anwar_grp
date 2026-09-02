@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { ApplicationDetail } from "@/components/applications/ApplicationPanel";
 import { CandidateWorkspace } from "@/components/candidates/CandidateWorkspace";
 import { DetailItem, DetailList } from "@/components/ui/DetailList";
 import { DocumentUpload } from "@/components/ui/DocumentUpload";
@@ -13,9 +14,17 @@ import {
   getMockCandidate,
   getMockStageHistory,
 } from "../../_mock-candidates";
+import { getMockCommunications, getMockTemplates } from "../../_mock-communications";
+import { getMockInterviews } from "../../_mock-interviews";
+import { getMockRequisition } from "../../_mock-requisitions";
+import { getMockScreening } from "../../_mock-screening";
 import {
+  MOCK_COMPANY_NAME,
   MOCK_CURRENT_USER,
+  MOCK_CURRENT_USER_CONTACT,
+  MOCK_EVALUATION_FORMS,
   MOCK_HIRING_MANAGERS,
+  MOCK_PANEL_MEMBERS,
   MOCK_RECRUITERS,
 } from "../../_mock-reference";
 
@@ -64,6 +73,52 @@ export default async function CandidateWorkspacePage({
   // GET /api/v1/users?role=RECRUITER,HIRING_MANAGER (action owners).
   const people = [...MOCK_RECRUITERS, ...MOCK_HIRING_MANAGERS];
 
+  // SWAP POINTS — one bundle per application, fetched together for the same
+  // reason the stage history is: the tab strip is client-side, so switching
+  // applications must not cost a round trip.
+  //   GET /api/v1/applications/{id}/screening        (404 = not recorded yet)
+  //   GET /api/v1/applications/{id}/interviews
+  //   GET /api/v1/applications/{id}/communications
+  // `department`/`businessUnit` come from the application's requisition
+  // (GET /api/v1/requisitions/{id}); they are carried here because the message
+  // templates interpolate them and `ApplicationSummary` does not hold them.
+  const detailByApplication: Record<string, ApplicationDetail> =
+    Object.fromEntries(
+      candidate.applications.map((application) => {
+        const requisition = getMockRequisition(application.requisitionId);
+        return [
+          application.id,
+          {
+            screening: getMockScreening(application.id),
+            interviews: getMockInterviews(application.id),
+            communications: getMockCommunications(application.id),
+            department: requisition?.department.name ?? "—",
+            businessUnit: requisition?.businessUnit.name ?? "—",
+          } satisfies ApplicationDetail,
+        ];
+      }),
+    );
+
+  // SWAP POINTS — GET /api/v1/message-templates, GET /api/v1/users?role=…,
+  // GET /api/v1/evaluation-forms (Phase 4). The recruiter's own contact
+  // details come from the session's user record server-side.
+  const sectionsConfig = {
+    templates: getMockTemplates(),
+    panelMembers: MOCK_PANEL_MEMBERS,
+    evaluationForms: MOCK_EVALUATION_FORMS,
+    candidate: {
+      name: candidate.name,
+      email: candidate.email,
+      mobile: candidate.mobile,
+    },
+    recruiter: {
+      name: MOCK_CURRENT_USER.name,
+      email: MOCK_CURRENT_USER_CONTACT.email,
+      mobile: MOCK_CURRENT_USER_CONTACT.mobile,
+    },
+    companyName: MOCK_COMPANY_NAME,
+  };
+
   return (
     <>
       <PageHeader
@@ -86,6 +141,8 @@ export default async function CandidateWorkspacePage({
           <CandidateWorkspace
             applications={candidate.applications}
             historyByApplication={historyByApplication}
+            detailByApplication={detailByApplication}
+            sectionsConfig={sectionsConfig}
             people={people}
             currentUser={MOCK_CURRENT_USER}
           />

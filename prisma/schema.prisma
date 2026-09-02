@@ -26,24 +26,24 @@ enum Role {
 }
 
 model BusinessUnit {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  departments Department[]
-  users       User[]
+  id           String        @id @default(cuid())
+  name         String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  departments  Department[]
+  users        User[]
   requisitions Requisition[]
 
   @@map("business_units")
 }
 
 model Department {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
   businessUnitId String
-  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  businessUnit   BusinessUnit  @relation(fields: [businessUnitId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   users          User[]
   requisitions   Requisition[]
 
@@ -52,30 +52,39 @@ model Department {
 }
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
+  id             String        @id @default(cuid())
+  email          String        @unique
   passwordHash   String
   name           String
   role           Role
   businessUnitId String?
   businessUnit   BusinessUnit? @relation(fields: [businessUnitId], references: [id])
   departmentId   String?
-  department     Department?  @relation(fields: [departmentId], references: [id])
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  department     Department?   @relation(fields: [departmentId], references: [id])
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  sessions              Session[]
-  auditLogs             AuditLog[]
-  confidentialGrants    ConfidentialDataGrant[] @relation("GrantRecipient")
-  grantsIssued          ConfidentialDataGrant[] @relation("GrantIssuer")
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  confidentialGrants ConfidentialDataGrant[] @relation("GrantRecipient")
+  grantsIssued       ConfidentialDataGrant[] @relation("GrantIssuer")
 
   // Phase 2 (Requisition -> Candidate) relations.
-  requisitionsAsHiringManager  Requisition[] @relation("RequisitionHiringManager")
-  requisitionsAsRecruiter     Requisition[] @relation("RequisitionRecruiter")
-  applicationsAsRecruiter     Application[] @relation("ApplicationRecruiter")
-  applicationsAsNextActionOwner Application[] @relation("ApplicationNextActionOwner")
-  stageHistoryChanges         StageHistory[] @relation("StageHistoryChangedBy")
+  requisitionsAsHiringManager   Requisition[]  @relation("RequisitionHiringManager")
+  requisitionsAsRecruiter       Requisition[]  @relation("RequisitionRecruiter")
+  applicationsAsRecruiter       Application[]  @relation("ApplicationRecruiter")
+  applicationsAsNextActionOwner Application[]  @relation("ApplicationNextActionOwner")
+  stageHistoryChanges           StageHistory[] @relation("StageHistoryChangedBy")
+
+  // Phase 3 (Screening + Interview Scheduling + Communication) relations.
+  screeningAssessmentsCreated ScreeningAssessment[]        @relation("ScreeningCreatedBy")
+  interviewsCreated           Interview[]                  @relation("InterviewCreatedBy")
+  interviewPanelistOf         InterviewPanelist[]
+  interviewReschedulesChanged InterviewRescheduleHistory[] @relation("InterviewRescheduleChangedBy")
+  messageTemplatesCreated     MessageTemplate[]            @relation("MessageTemplateCreatedBy")
+  communicationsDrafted       Communication[]              @relation("CommunicationDraftedBy")
+  communicationsApproved      Communication[]              @relation("CommunicationApprovedBy")
 
   @@map("users")
 }
@@ -141,15 +150,15 @@ enum DocumentOwnerType {
 // Never stores the file itself — storageKey points at the S3-compatible
 // object store. Upload/download both go through presigned URLs.
 model Document {
-  id          String            @id @default(cuid())
-  ownerType   DocumentOwnerType
-  ownerId     String
-  storageKey  String            @unique
-  fileName    String
-  contentType String
-  sizeBytes   Int
+  id           String            @id @default(cuid())
+  ownerType    DocumentOwnerType
+  ownerId      String
+  storageKey   String            @unique
+  fileName     String
+  contentType  String
+  sizeBytes    Int
   uploadedById String
-  createdAt   DateTime          @default(now())
+  createdAt    DateTime          @default(now())
 
   @@index([ownerType, ownerId])
   @@map("documents")
@@ -208,20 +217,20 @@ model Requisition {
   businessUnit        BusinessUnit              @relation(fields: [businessUnitId], references: [id])
   departmentId        String
   department          Department                @relation(fields: [departmentId], references: [id])
-  position             String
-  vacancyCount         Int
-  positionLevel        String
-  hiringManagerId      String
-  hiringManager        User                      @relation("RequisitionHiringManager", fields: [hiringManagerId], references: [id])
-  assignedRecruiterId  String
-  assignedRecruiter    User                      @relation("RequisitionRecruiter", fields: [assignedRecruiterId], references: [id])
-  targetJoiningDate    DateTime
-  approvalStatus       RequisitionApprovalStatus @default(DRAFT)
-  erfRrfDocumentId     String?                   @unique
-  notes                String?
-  version              Int                       @default(1)
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  position            String
+  vacancyCount        Int
+  positionLevel       String
+  hiringManagerId     String
+  hiringManager       User                      @relation("RequisitionHiringManager", fields: [hiringManagerId], references: [id])
+  assignedRecruiterId String
+  assignedRecruiter   User                      @relation("RequisitionRecruiter", fields: [assignedRecruiterId], references: [id])
+  targetJoiningDate   DateTime
+  approvalStatus      RequisitionApprovalStatus @default(DRAFT)
+  erfRrfDocumentId    String?                   @unique
+  notes               String?
+  version             Int                       @default(1)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 
   applications Application[]
 
@@ -254,23 +263,28 @@ model Candidate {
 }
 
 model Application {
-  id                   String            @id @default(cuid())
-  candidateId          String
-  candidate            Candidate         @relation(fields: [candidateId], references: [id])
-  requisitionId        String
-  requisition          Requisition       @relation(fields: [requisitionId], references: [id])
-  assignedRecruiterId  String
-  assignedRecruiter    User              @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
-  currentStage         ApplicationStage  @default(NEW)
-  nextAction           String?
-  nextActionOwnerId    String?
-  nextActionOwner      User?             @relation("ApplicationNextActionOwner", fields: [nextActionOwnerId], references: [id])
-  nextActionDueDate    DateTime?
-  version              Int               @default(1)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  id                  String           @id @default(cuid())
+  candidateId         String
+  candidate           Candidate        @relation(fields: [candidateId], references: [id])
+  requisitionId       String
+  requisition         Requisition      @relation(fields: [requisitionId], references: [id])
+  assignedRecruiterId String
+  assignedRecruiter   User             @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
+  currentStage        ApplicationStage @default(NEW)
+  nextAction          String?
+  nextActionOwnerId   String?
+  nextActionOwner     User?            @relation("ApplicationNextActionOwner", fields: [nextActionOwnerId], references: [id])
+  nextActionDueDate   DateTime?
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   stageHistory StageHistory[]
+
+  // Phase 3 relations.
+  screeningAssessments ScreeningAssessment[]
+  interviews           Interview[]
+  communications       Communication[]
 
   @@index([assignedRecruiterId])
   @@index([currentStage])
@@ -296,4 +310,242 @@ model StageHistory {
 
   @@index([applicationId])
   @@map("stage_history")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 (Screening + Interview Scheduling + Communication):
+// BUILD_PLAN.md Sec 3.1 item 3. Evaluation (Phase 4) is deliberately NOT
+// modeled beyond the `Interview.evaluationFormId` forward-compat
+// placeholder below — see that field's comment.
+// ---------------------------------------------------------------------------
+
+enum ScreeningAttendance {
+  ATTENDED
+  NO_SHOW
+  RESCHEDULED
+}
+
+// Recording a screening/telephone-assessment outcome for an application.
+// Per PDF Sec "Screening and Assessment": eligibility, screening comments,
+// telephone-assessment outcome, availability, recommendation, assessment
+// type, assessment score, attendance, uploaded assessment documents,
+// evaluator recommendation.
+//
+// Design decision (not spelled out field-by-field in the PDF): recording a
+// screening here does NOT itself transition Application.currentStage.
+// Eligibility/outcome here can resolve to several different next moves
+// (advance to assessment/interview, put on hold, reject outright) and the
+// PDF/BUILD_PLAN's stage-transition table (lib/application-stages.ts)
+// already models those as explicit recruiter-driven choices via
+// PATCH /applications/:id/stage. Auto-transitioning here would silently
+// hide that decision inside a record-creation endpoint — kept separate so
+// the recruiter always makes the stage call explicitly, using this record
+// as input. No update path is exposed for now (append rows for
+// re-screenings rather than mutate — mirrors StageHistory's insert-only
+// spirit even though this isn't a strict system-of-record audit log).
+model ScreeningAssessment {
+  id                         String               @id @default(cuid())
+  applicationId              String
+  application                Application          @relation(fields: [applicationId], references: [id])
+  eligibility                Boolean
+  screeningComments          String?
+  telephoneAssessmentOutcome String?
+  availability               String?
+  recommendation             String?
+  assessmentType             String?
+  assessmentScore            Float?
+  attendance                 ScreeningAttendance?
+  evaluatorRecommendation    String?
+  // Owner type SCREENING_ASSESSMENT — see lib/phase3-document-authz.ts for
+  // the download-authz checker registered at boot (instrumentation.ts).
+  assessmentDocumentId       String?              @unique
+  createdById                String
+  createdBy                  User                 @relation("ScreeningCreatedBy", fields: [createdById], references: [id])
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  @@index([applicationId])
+  @@map("screening_assessments")
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+// Per PDF Sec "Interview Scheduling": multiple rounds, date/time/duration/
+// location/online link, panel assignment, evaluation-form assignment,
+// candidate instructions, reminders (reminder *sending* is the
+// Communication pipeline below, not modeled again here), rescheduling
+// history (InterviewRescheduleHistory).
+//
+// Design decision: scheduling a round DOES attempt to auto-transition
+// Application.currentStage to INTERVIEW (via lib/application-stages.ts'
+// isValidStageTransition), because unlike screening, "an interview has
+// been scheduled" maps unambiguously onto the pipeline's INTERVIEW stage
+// with no competing outcome — scheduling never means "reject" or "hold."
+// If the application is already at/past INTERVIEW (e.g. round 2+, or a
+// FEEDBACK_PENDING loop-back per lib/application-stages.ts), no forced
+// transition is attempted and scheduling proceeds regardless; if the
+// transition genuinely isn't valid from the current stage the route
+// still creates the Interview but does not force the stage (recruiter
+// keeps control) — see app/api/v1/applications/[id]/interviews/route.ts.
+model Interview {
+  id                    String          @id @default(cuid())
+  applicationId         String
+  application           Application     @relation(fields: [applicationId], references: [id])
+  roundNumber           Int
+  scheduledAt           DateTime
+  durationMinutes       Int
+  location              String?
+  onlineLink            String?
+  candidateInstructions String?
+  status                InterviewStatus @default(SCHEDULED)
+  // Forward-compat placeholder for Phase 4 (Evaluation module) — carries
+  // no relation/behavior yet, just reserves the column so Phase 4 doesn't
+  // need an extra migration solely to attach an evaluation form id.
+  evaluationFormId      String?
+  version               Int             @default(1)
+  createdById           String
+  createdBy             User            @relation("InterviewCreatedBy", fields: [createdById], references: [id])
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  panelists         InterviewPanelist[]
+  rescheduleHistory InterviewRescheduleHistory[]
+
+  @@index([applicationId])
+  @@map("interviews")
+}
+
+// Panel assignment as a join table (not a string[]) specifically so panel
+// members' "my assigned interviews" queries (Phase 4) can filter by
+// userId directly rather than scanning/unpacking an array column.
+model InterviewPanelist {
+  id          String    @id @default(cuid())
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  assignedAt  DateTime  @default(now())
+
+  @@unique([interviewId, userId])
+  @@index([userId])
+  @@map("interview_panelists")
+}
+
+// Append-only, mirrors StageHistory's pattern (BUILD_PLAN.md Sec 2.3) —
+// every reschedule of an Interview creates one row here rather than just
+// overwriting scheduledAt, per PDF's explicit "Rescheduling history"
+// requirement.
+model InterviewRescheduleHistory {
+  id                  String    @id @default(cuid())
+  interviewId         String
+  interview           Interview @relation(fields: [interviewId], references: [id])
+  previousScheduledAt DateTime
+  newScheduledAt      DateTime
+  reason              String?
+  changedById         String
+  changedBy           User      @relation("InterviewRescheduleChangedBy", fields: [changedById], references: [id])
+  changedAt           DateTime  @default(now())
+
+  @@index([interviewId])
+  @@map("interview_reschedule_history")
+}
+
+enum CommunicationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+// Categories per PDF Sec "Communication": interview invitations,
+// reminders, rescheduling, document requests, selection, rejection,
+// joining reminders.
+enum MessageTemplateCategory {
+  INTERVIEW_INVITATION
+  INTERVIEW_REMINDER
+  RESCHEDULING
+  DOCUMENT_REQUEST
+  SELECTION
+  REJECTION
+  JOINING_REMINDER
+}
+
+// Versioned, pre-approved template — required because WhatsApp Business
+// API needs Meta-approved templates for business-initiated conversations
+// (BUILD_PLAN.md Sec 2.10/assumption 3), and treating email the same way
+// keeps one code path for both channels.
+//
+// `allowedFields` is a per-template allowlist of placeholder names a
+// recruiter/admin declares this template may use. It is NOT the sole
+// security control — lib/message-templates.ts intersects this list
+// against a hardcoded SAFE_FIELD_REGISTRY at render time, and
+// `internal_notes`/`rejection_reason` (or any field carrying free-text
+// internal reasoning) are structurally never members of that registry,
+// so no template misconfiguration can ever cause them to render into a
+// candidate-facing message (see that file's doc comment for the full
+// argument).
+model MessageTemplate {
+  id            String                  @id @default(cuid())
+  name          String
+  channel       CommunicationChannel
+  category      MessageTemplateCategory
+  subject       String?
+  bodyTemplate  String
+  allowedFields String[]
+  version       Int                     @default(1)
+  isActive      Boolean                 @default(true)
+  createdById   String
+  createdBy     User                    @relation("MessageTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  communications Communication[]
+
+  @@index([channel, category, isActive])
+  @@map("message_templates")
+}
+
+// Status machine locked by BUILD_PLAN.md Sec 2.8:
+// Drafted -> Awaiting Approval -> Approved -> (enqueue) -> Sent ->
+// Delivered | Failed. `renderedBody`/`renderedSubject` are snapshotted at
+// draft time from lib/message-templates.ts's renderTemplate() output, so
+// later edits to the MessageTemplate never retroactively change history
+// a recruiter already approved/sent.
+model Communication {
+  id                String               @id @default(cuid())
+  applicationId     String
+  application       Application          @relation(fields: [applicationId], references: [id])
+  templateId        String
+  template          MessageTemplate      @relation(fields: [templateId], references: [id])
+  channel           CommunicationChannel
+  status            CommunicationStatus  @default(DRAFTED)
+  renderedSubject   String?
+  renderedBody      String
+  draftedById       String
+  draftedBy         User                 @relation("CommunicationDraftedBy", fields: [draftedById], references: [id])
+  approvedById      String?
+  approvedBy        User?                @relation("CommunicationApprovedBy", fields: [approvedById], references: [id])
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failureReason     String?
+  providerMessageId String?
+  version           Int                  @default(1)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([applicationId])
+  @@index([status])
+  @@map("communications")
+}
+
+enum CommunicationStatus {
+  DRAFTED
+  AWAITING_APPROVAL
+  APPROVED
+  SENT
+  DELIVERED
+  FAILED
 }

@@ -59,6 +59,11 @@ export function handleRouteError(err: unknown): NextResponse<ApiEnvelope<null>> 
       400,
     );
   }
+  if (err instanceof SyntaxError) {
+    // req.json() on a missing/malformed body throws a raw SyntaxError —
+    // map it to the same 400 envelope as a Zod failure rather than a 500.
+    return fail("VALIDATION_ERROR", "Request body must be valid JSON.", 400);
+  }
   console.error("[api] unhandled route error:", err);
   return fail("INTERNAL_ERROR", "An unexpected error occurred.", 500);
 }

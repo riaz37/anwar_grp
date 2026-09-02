@@ -1,10 +1,16 @@
 import {
+  COMMUNICATION_STATUS_LABELS,
+  INTERVIEW_STATUS_LABELS,
   REQUISITION_STATUS_LABELS,
   STAGE_LABELS,
   type ApplicationStage,
+  type CommunicationStatus,
+  type InterviewStatus,
   type RequisitionStatus,
 } from "@/lib/types/domain";
 import {
+  COMMUNICATION_STATUS_TONE,
+  INTERVIEW_STATUS_TONE,
   REQUISITION_STATUS_TONE,
   STAGE_TONE,
   STRUCK_STAGES,
@@ -73,6 +79,44 @@ export function StagePill({
       label={STAGE_LABELS[stage]}
       size={size}
       struck={STRUCK_STAGES.has(stage)}
+    />
+  );
+}
+
+export function InterviewStatusPill({
+  status,
+  size,
+}: {
+  status: InterviewStatus;
+  size?: keyof typeof SIZES;
+}) {
+  return (
+    <Pill
+      tone={INTERVIEW_STATUS_TONE[status]}
+      label={INTERVIEW_STATUS_LABELS[status]}
+      size={size}
+      struck={status === "CANCELLED"}
+    />
+  );
+}
+
+/**
+ * Communication pipeline status (BUILD_PLAN.md Sec 2.8). Defaults to `md`
+ * rather than `sm`: a message's status is the primary thing a recruiter reads
+ * off the communications list, not a row annotation.
+ */
+export function CommunicationStatusPill({
+  status,
+  size = "md",
+}: {
+  status: CommunicationStatus;
+  size?: keyof typeof SIZES;
+}) {
+  return (
+    <Pill
+      tone={COMMUNICATION_STATUS_TONE[status]}
+      label={COMMUNICATION_STATUS_LABELS[status]}
+      size={size}
     />
   );
 }

@@ -57,6 +57,24 @@ export function todayIsoDate(now = new Date()): string {
   return utc.toISOString().slice(0, 10);
 }
 
+/**
+ * `10:30` → `10:30`. Interview times are stored and shown as a 24-hour local
+ * wall clock (see the RECONCILIATION NOTE on `InterviewRound`), so this only
+ * normalises shape — it never converts a zone.
+ */
+export function formatTime(hhmm: string): string {
+  const [hours = "", minutes = ""] = hhmm.split(":");
+  return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+}
+
+/** `45` → `45 min`; `90` → `1 h 30 min`; `60` → `1 h`. */
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
 /** Whole days a record has sat in its current state. Never negative. */
 export function daysSince(iso: string, now = new Date()): number {
   const then = new Date(iso).getTime();

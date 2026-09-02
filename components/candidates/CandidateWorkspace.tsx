@@ -1,7 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ApplicationPanel } from "@/components/applications/ApplicationPanel";
+import {
+  ApplicationPanel,
+  type ApplicationDetail,
+  type ApplicationSectionsConfig,
+} from "@/components/applications/ApplicationPanel";
 import { StagePill } from "@/components/ui/StatusPill";
 import { dueLabel, urgencyOf } from "@/components/tasks/types";
 import type {
@@ -35,11 +39,17 @@ const URGENCY_TEXT = {
 export function CandidateWorkspace({
   applications: initialApplications,
   historyByApplication: initialHistory,
+  detailByApplication,
+  sectionsConfig,
   people,
   currentUser,
 }: {
   applications: ApplicationSummary[];
   historyByApplication: Record<string, StageHistoryEntry[]>;
+  /** Screening / interviews / communications, one entry per application. */
+  detailByApplication: Record<string, ApplicationDetail>;
+  /** Reference data shared by every application's sections. */
+  sectionsConfig: ApplicationSectionsConfig;
   people: readonly PersonRef[];
   currentUser: PersonRef;
 }) {
@@ -211,6 +221,17 @@ export function CandidateWorkspace({
             <ApplicationPanel
               application={application}
               history={history[application.id] ?? []}
+              detail={
+                detailByApplication[application.id] ?? {
+                  screening: null,
+                  interviews: [],
+                  communications: [],
+                  department: "—",
+                  businessUnit: "—",
+                }
+              }
+              config={sectionsConfig}
+              currentUser={currentUser}
               people={people}
               onApplied={(change) => handleApplied(application.id, change)}
             />

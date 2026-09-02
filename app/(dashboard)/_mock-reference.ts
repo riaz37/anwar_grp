@@ -1,4 +1,8 @@
-import type { OrgUnitRef, PersonRef } from "@/lib/types/domain";
+import type {
+  EvaluationFormRef,
+  OrgUnitRef,
+  PersonRef,
+} from "@/lib/types/domain";
 
 /**
  * TEMPORARY reference data (business units, departments, people).
@@ -61,6 +65,83 @@ export const MOCK_HIRING_MANAGERS: readonly PersonRef[] = [
 ];
 
 /**
+ * People who can sit on an interview panel (spec Sec 6 > Interview Scheduling,
+ * "Interview-panel assignment"; spec Sec 3 lists "Interview panel members" as
+ * a primary user in their own right).
+ *
+ * Deliberately a superset of hiring managers rather than a copy of it: a panel
+ * is usually one hiring manager plus one or two subject-matter colleagues who
+ * are not managers of anything, and modelling it as "hiring managers only"
+ * would make half of Anwar Group's real panels unrepresentable.
+ *
+ * `role` is carried for display only — the picker groups by it so a recruiter
+ * assembling a panel can see they have not booked three people from the same
+ * function.
+ *
+ * SWAP POINT — GET /api/v1/users?role=HIRING_MANAGER,PANEL_MEMBER
+ * RECONCILIATION NOTE — Prisma's `Role` enum (Phase 1) has no PANEL_MEMBER
+ * value at the time of writing. Either add one, or treat "panelist" as a
+ * per-interview relationship rather than a role, in which case this list is
+ * simply "all internal users" and the `role` label below comes from the
+ * user's department.
+ */
+export const MOCK_PANEL_MEMBERS: readonly (PersonRef & { role: string })[] = [
+  { id: "usr_hm_1", name: "Kamrul Hasan", role: "Hiring manager" },
+  { id: "usr_hm_2", name: "Shirin Sultana", role: "Hiring manager" },
+  { id: "usr_hm_3", name: "Abdullah Al Mamun", role: "Hiring manager" },
+  { id: "usr_hm_4", name: "Nusrat Jahan", role: "Hiring manager" },
+  { id: "usr_hm_5", name: "Zahid Iqbal", role: "Hiring manager" },
+  { id: "usr_panel_1", name: "Farzana Haque", role: "Department head" },
+  { id: "usr_panel_2", name: "Sabbir Rahman", role: "Department head" },
+  { id: "usr_panel_3", name: "Tuhin Chowdhury", role: "Subject specialist" },
+  { id: "usr_panel_4", name: "Marufa Begum", role: "Subject specialist" },
+  { id: "usr_panel_5", name: "Ashiqur Rahman", role: "Subject specialist" },
+  { id: "usr_recruiter_1", name: "Sadia Karim", role: "Recruiter" },
+  { id: "usr_recruiter_2", name: "Mahmudul Haque", role: "Recruiter" },
+];
+
+/**
+ * Evaluation forms are Phase 4 (BUILD_PLAN.md Sec 3.1 item 4). Scheduling has
+ * to name one now — spec Sec 6 lists "Evaluation-form assignment" under
+ * Interview Scheduling, not under Evaluation — so these are forward-declared
+ * placeholders. Assigning one records an intent; it does not create, open or
+ * validate anything, and the scheduling form says so on screen.
+ *
+ * The criteria in each description are spec Sec 6 > Interview Evaluation's own
+ * list ("relevant experience, technical or functional capability,
+ * communication, problem-solving, leadership, organizational suitability"),
+ * split across role types the way that section's "configurable for different
+ * role types" sentence implies.
+ *
+ * SWAP POINT — GET /api/v1/evaluation-forms?positionLevel= (Phase 4).
+ */
+export const MOCK_EVALUATION_FORMS: readonly EvaluationFormRef[] = [
+  {
+    id: "evf_standard",
+    name: "Standard technical round",
+    description:
+      "Relevant experience · technical capability · problem-solving · communication",
+  },
+  {
+    id: "evf_functional",
+    name: "Functional / commercial round",
+    description:
+      "Relevant experience · functional capability · communication · organisational suitability",
+  },
+  {
+    id: "evf_leadership",
+    name: "Leadership round",
+    description:
+      "Leadership · organisational suitability · strengths and concerns · overall recommendation",
+  },
+  {
+    id: "evf_entry",
+    name: "Entry-level screening round",
+    description: "Communication · problem-solving · organisational suitability",
+  },
+];
+
+/**
  * Stand-in for the signed-in user. Real value comes from `getSession()` in a
  * server component — used here only so mock rows can render "You" as an
  * action owner consistently with `_mock-tasks.ts`.
@@ -69,6 +150,19 @@ export const MOCK_CURRENT_USER: PersonRef = {
   id: "usr_recruiter_1",
   name: "Sadia Karim",
 };
+
+/**
+ * Contact details for the signed-in recruiter, needed by the message-template
+ * renderer (`recruiter.name` / `recruiter.email` / `recruiter.mobile` are on
+ * the allowlist). Real values come from the session's user record.
+ */
+export const MOCK_CURRENT_USER_CONTACT = {
+  email: "sadia.karim@anwargroup.test",
+  mobile: "+8801711 000 100",
+};
+
+/** Legal entity name used by `company.name` in message templates. */
+export const MOCK_COMPANY_NAME = "Anwar Group of Industries";
 
 export function departmentsFor(businessUnitId: string): OrgUnitRef[] {
   return MOCK_DEPARTMENTS.filter(
@@ -86,6 +180,7 @@ export function orgUnitById(id: string): OrgUnitRef {
 export function personById(id: string): PersonRef {
   const match =
     MOCK_RECRUITERS.find((person) => person.id === id) ??
-    MOCK_HIRING_MANAGERS.find((person) => person.id === id);
-  return match ?? { id, name: "—" };
+    MOCK_HIRING_MANAGERS.find((person) => person.id === id) ??
+    MOCK_PANEL_MEMBERS.find((person) => person.id === id);
+  return match ? { id: match.id, name: match.name } : { id, name: "—" };
 }

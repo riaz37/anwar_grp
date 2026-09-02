@@ -562,3 +562,42 @@ shapes have real differences (ref codes, positionLevel enum vs string,
 field naming) worth reconciling deliberately.
 
 Next: Phase 3 (Screening + Interview Scheduling, Sec 3.1 item 3).
+
+---
+
+## Phase 3 status: backend + frontend complete, wiring pending (2026-09-02)
+
+Same parallel backend + frontend agent pair pattern. Backend added
+`ScreeningAssessment`, `Interview`/`InterviewPanelist`/
+`InterviewRescheduleHistory`, `MessageTemplate`, `Communication`
+models, the field-allowlist enforcement (`lib/message-templates.ts` —
+`internal_notes`/`rejection_reason` are structurally absent from the
+safe-field registry, not just filtered), and the BullMQ communication-
+send pipeline (`lib/queue.ts`, `lib/communication-worker.ts`, stub
+Email/WhatsApp providers) bootstrapped in-process via
+`instrumentation.ts` (documented as a demo-pragmatic choice; Sec 2.11
+calls for a standalone worker process in production). Frontend added a
+second-level tab strip (Pipeline · Screening · Interviews · Messages)
+inside the existing per-application view, the reschedule-history
+timeline, and a two-step confirm-gated message-approval interaction —
+against typed mock data with documented swap points.
+
+Independently verified live: the full Drafted → Awaiting Approval →
+Approved → (worker) → Sent → Delivered pipeline actually runs end-to-
+end against Redis/Postgres, and the field-allowlist security property
+holds — a template created with `internal_notes` in its `allowedFields`
+had that field silently dropped at creation (`meta.droppedFields`), and
+the rendered message body confirmed it never appears. Fixed one real
+bug surfaced during verification: `handleRouteError` (`lib/api-
+response.ts`) returned a raw 500 for a missing/malformed JSON body
+instead of a clean 400 — now maps `SyntaxError` to `VALIDATION_ERROR`
+like a Zod failure, across every route that uses it.
+
+Frontend mock-to-real wiring tracked in `TODOS.md` ("Phase 3 frontend:
+wire mock data to the real API"), same reasoning as Phase 2 — plus a
+short list of small schema/API gaps the frontend agent surfaced
+(`ScreeningAssessment.version`, non-null reschedule reason, retry-
+attempt count, eligibility as an enum) worth resolving during that
+pass rather than now.
+
+Next: Phase 4 (Interview Evaluation + Feedback, Sec 3.1 item 4).

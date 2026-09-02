@@ -18,7 +18,12 @@
 
 import type {
   ApplicationStage,
+  CommunicationStatus,
+  EligibilityOutcome,
+  EvaluatorRecommendation,
+  InterviewStatus,
   RequisitionStatus,
+  ScreeningRecommendation,
 } from "@/lib/types/domain";
 
 export type Tone = "neutral" | "accent" | "info" | "warning" | "success" | "error";
@@ -105,6 +110,93 @@ export const STAGE_TONE: Record<ApplicationStage, Tone> = {
   WITHDRAWN: "neutral",
   REDIRECTED: "info",
   CLOSED: "neutral",
+};
+
+/**
+ * Communication status → tone (spec Sec 6 > Communication; BUILD_PLAN.md
+ * Sec 2.8's locked pipeline).
+ *
+ * The pipeline has six states but only three *questions* a recruiter asks of
+ * it: is anyone waiting on me, is it still moving, and did it land. The
+ * mapping answers those three and nothing else.
+ *
+ * DRAFTED           neutral — parked on the record. No obligation on anyone,
+ *                             same reading as a DRAFT requisition.
+ * AWAITING_APPROVAL warning — a named human is being waited on before a
+ *                             candidate-facing message can go out. DESIGN.md
+ *                             names "awaiting approval" as the warning example.
+ * APPROVED          accent  — cleared, and the send job is in flight. This is
+ *                             the one transient state where the *system* is
+ *                             doing work, which is DESIGN.md's accent meaning.
+ * SENT              info    — true and reassuring, but not actionable: the
+ *                             provider has it, and only a delivery receipt can
+ *                             move it on. Deliberately not `success` — SENT is
+ *                             not the ending the spec asks the UI to prove.
+ * DELIVERED         success — DESIGN.md names "Delivered" as a success example.
+ * FAILED            error   — DESIGN.md names "Failed" as an error example. It
+ *                             is also the only status that puts work *back* on
+ *                             the recruiter, which is why the card for a failed
+ *                             message carries a retry action rather than
+ *                             reading as a dead end.
+ */
+export const COMMUNICATION_STATUS_TONE: Record<CommunicationStatus, Tone> = {
+  DRAFTED: "neutral",
+  AWAITING_APPROVAL: "warning",
+  APPROVED: "accent",
+  SENT: "info",
+  DELIVERED: "success",
+  FAILED: "error",
+};
+
+/**
+ * Interview status → tone.
+ *
+ * SCHEDULED   accent  — live: it is going to happen and needs coordinating.
+ * RESCHEDULED accent  — still live; the reschedule history carries the story,
+ *                       so the pill does not need to shout about it.
+ * COMPLETED   success — it happened. Feedback chasing is a stage concern, not
+ *                       an interview-record one.
+ * CANCELLED   neutral — called off; not a failure of anybody.
+ * NO_SHOW     error   — a negative outcome the recruiter has to act on.
+ */
+export const INTERVIEW_STATUS_TONE: Record<InterviewStatus, Tone> = {
+  SCHEDULED: "accent",
+  RESCHEDULED: "accent",
+  COMPLETED: "success",
+  CANCELLED: "neutral",
+  NO_SHOW: "error",
+};
+
+/**
+ * Screening outcomes → tone. Only the eligibility verdict and the two
+ * recommendations get colour; the remaining screening fields (availability,
+ * telephone outcome, attendance) are facts, not judgements, and are rendered
+ * as plain text so colour keeps meaning something.
+ */
+export const ELIGIBILITY_TONE: Record<EligibilityOutcome, Tone> = {
+  ELIGIBLE: "success",
+  ELIGIBLE_WITH_RESERVATION: "warning",
+  NOT_ELIGIBLE: "error",
+};
+
+export const SCREENING_RECOMMENDATION_TONE: Record<
+  ScreeningRecommendation,
+  Tone
+> = {
+  PROCEED_TO_ASSESSMENT: "accent",
+  PROCEED_TO_INTERVIEW: "accent",
+  HOLD: "info",
+  REJECT: "error",
+};
+
+export const EVALUATOR_RECOMMENDATION_TONE: Record<
+  EvaluatorRecommendation,
+  Tone
+> = {
+  STRONGLY_RECOMMEND: "success",
+  RECOMMEND: "success",
+  BORDERLINE: "warning",
+  NOT_RECOMMENDED: "error",
 };
 
 /**

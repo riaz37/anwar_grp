@@ -326,6 +326,488 @@ export interface DuplicateMatch {
   applicationCount: number;
 }
 
+/* ── Screening and assessment (spec Sec 6 > Screening and Assessment) ────── */
+
+/**
+ * The ten fields the spec lists verbatim, in its own order:
+ *   eligibility · screening comments · telephone-assessment outcome ·
+ *   availability · recommendation · assessment type · assessment score ·
+ *   attendance · uploaded assessment documents · evaluator recommendation.
+ *
+ * Everything except `eligibility` is optional in practice — the record is
+ * filled in over two sittings (a phone screen first, a paper assessment days
+ * later), and spec Sec 7 asks for "low in mandatory data entry". The form
+ * enforces only what a stage decision genuinely needs.
+ */
+
+export const ELIGIBILITY_OUTCOMES = [
+  "ELIGIBLE",
+  "ELIGIBLE_WITH_RESERVATION",
+  "NOT_ELIGIBLE",
+] as const;
+
+export type EligibilityOutcome = (typeof ELIGIBILITY_OUTCOMES)[number];
+
+export const ELIGIBILITY_LABELS: Record<EligibilityOutcome, string> = {
+  ELIGIBLE: "Eligible",
+  ELIGIBLE_WITH_RESERVATION: "Eligible with reservation",
+  NOT_ELIGIBLE: "Not eligible",
+};
+
+/** Outcome of the recruiter's phone screen — spec's "telephone-assessment". */
+export const TELEPHONE_OUTCOMES = [
+  "NOT_ATTEMPTED",
+  "COMPLETED",
+  "NO_ANSWER",
+  "CALL_BACK_REQUESTED",
+  "DECLINED",
+  "WRONG_NUMBER",
+] as const;
+
+export type TelephoneOutcome = (typeof TELEPHONE_OUTCOMES)[number];
+
+export const TELEPHONE_OUTCOME_LABELS: Record<TelephoneOutcome, string> = {
+  NOT_ATTEMPTED: "Not attempted yet",
+  COMPLETED: "Completed",
+  NO_ANSWER: "No answer",
+  CALL_BACK_REQUESTED: "Call-back requested",
+  DECLINED: "Candidate declined",
+  WRONG_NUMBER: "Wrong number",
+};
+
+/** The recruiter's own call after screening — what should happen next. */
+export const SCREENING_RECOMMENDATIONS = [
+  "PROCEED_TO_ASSESSMENT",
+  "PROCEED_TO_INTERVIEW",
+  "HOLD",
+  "REJECT",
+] as const;
+
+export type ScreeningRecommendation =
+  (typeof SCREENING_RECOMMENDATIONS)[number];
+
+export const SCREENING_RECOMMENDATION_LABELS: Record<
+  ScreeningRecommendation,
+  string
+> = {
+  PROCEED_TO_ASSESSMENT: "Proceed to assessment",
+  PROCEED_TO_INTERVIEW: "Proceed straight to interview",
+  HOLD: "Hold for now",
+  REJECT: "Do not proceed",
+};
+
+/**
+ * Spec Sec 4 names "Paper-assessment result recording" explicitly, so
+ * `WRITTEN_PAPER` is first. `NONE` exists because plenty of roles skip the
+ * assessment entirely and the record still has to say so out loud — an empty
+ * field reads as "not done yet", which is a different thing.
+ */
+export const ASSESSMENT_TYPES = [
+  "NONE",
+  "WRITTEN_PAPER",
+  "ONLINE_TEST",
+  "PRACTICAL_TASK",
+  "CASE_STUDY",
+  "PORTFOLIO_REVIEW",
+] as const;
+
+export type AssessmentType = (typeof ASSESSMENT_TYPES)[number];
+
+export const ASSESSMENT_TYPE_LABELS: Record<AssessmentType, string> = {
+  NONE: "No assessment for this role",
+  WRITTEN_PAPER: "Written paper",
+  ONLINE_TEST: "Online test",
+  PRACTICAL_TASK: "Practical task",
+  CASE_STUDY: "Case study",
+  PORTFOLIO_REVIEW: "Portfolio review",
+};
+
+export const ASSESSMENT_ATTENDANCE = [
+  "NOT_APPLICABLE",
+  "ATTENDED",
+  "ABSENT",
+  "LATE",
+  "RESCHEDULED",
+] as const;
+
+export type AssessmentAttendance = (typeof ASSESSMENT_ATTENDANCE)[number];
+
+export const ASSESSMENT_ATTENDANCE_LABELS: Record<
+  AssessmentAttendance,
+  string
+> = {
+  NOT_APPLICABLE: "Not applicable",
+  ATTENDED: "Attended",
+  ABSENT: "Did not attend",
+  LATE: "Attended late",
+  RESCHEDULED: "Rescheduled",
+};
+
+/** The assessment evaluator's verdict — distinct from the recruiter's. */
+export const EVALUATOR_RECOMMENDATIONS = [
+  "STRONGLY_RECOMMEND",
+  "RECOMMEND",
+  "BORDERLINE",
+  "NOT_RECOMMENDED",
+] as const;
+
+export type EvaluatorRecommendation =
+  (typeof EVALUATOR_RECOMMENDATIONS)[number];
+
+export const EVALUATOR_RECOMMENDATION_LABELS: Record<
+  EvaluatorRecommendation,
+  string
+> = {
+  STRONGLY_RECOMMEND: "Strongly recommend",
+  RECOMMEND: "Recommend",
+  BORDERLINE: "Borderline",
+  NOT_RECOMMENDED: "Not recommended",
+};
+
+/**
+ * One screening + assessment record per application.
+ *
+ * RECONCILIATION NOTE — the backend's `ScreeningAssessment` model does not
+ * exist yet at the time of writing, so every field name below is this agent's
+ * proposal, not a read of the schema. Three shapes are worth agreeing on
+ * explicitly before the model lands:
+ *
+ *  1. `assessmentScore` + `assessmentMaxScore` rather than a bare score. A
+ *     score with no scale is unreadable in a list ("62" out of what?), and
+ *     different assessment types are marked out of different totals. If the
+ *     backend prefers a single normalised percentage, this becomes
+ *     `assessmentScorePercent: number` and the form does the division.
+ *  2. `availability` is free text ("Available from 1 Oct, 30-day notice").
+ *     A structured `noticePeriodDays` + `earliestStartDate` pair would report
+ *     better, but the spec says only "Availability", and recruiters record
+ *     this verbatim off a phone call today.
+ *  3. `documents` is a list, not a single ref — a paper assessment is often
+ *     a scanned answer sheet *plus* a marking sheet.
+ */
+export interface ScreeningAssessment {
+  id: string;
+  applicationId: string;
+  eligibility: EligibilityOutcome;
+  screeningComments: string;
+  telephoneOutcome: TelephoneOutcome;
+  availability: string;
+  recommendation: ScreeningRecommendation;
+  assessmentType: AssessmentType;
+  /** Null while the assessment has not been marked (or type is `NONE`). */
+  assessmentScore: number | null;
+  assessmentMaxScore: number;
+  attendance: AssessmentAttendance;
+  documents: DocumentRef[];
+  evaluatorRecommendation: EvaluatorRecommendation | null;
+  evaluatorComments: string;
+  recordedBy: PersonRef;
+  /** ISO-8601 timestamps. */
+  recordedAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/* ── Interview scheduling (spec Sec 6 > Interview Scheduling) ────────────── */
+
+/** "Date, time, duration, location, or online link" — the spec's own OR. */
+export const INTERVIEW_MODES = ["IN_PERSON", "ONLINE"] as const;
+
+export type InterviewMode = (typeof INTERVIEW_MODES)[number];
+
+export const INTERVIEW_MODE_LABELS: Record<InterviewMode, string> = {
+  IN_PERSON: "In person",
+  ONLINE: "Online",
+};
+
+export const INTERVIEW_STATUSES = [
+  "SCHEDULED",
+  "RESCHEDULED",
+  "COMPLETED",
+  "CANCELLED",
+  "NO_SHOW",
+] as const;
+
+export type InterviewStatus = (typeof INTERVIEW_STATUSES)[number];
+
+export const INTERVIEW_STATUS_LABELS: Record<InterviewStatus, string> = {
+  SCHEDULED: "Scheduled",
+  RESCHEDULED: "Rescheduled",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  NO_SHOW: "Candidate did not attend",
+};
+
+/**
+ * One entry of the rescheduling history the spec requires to be visible.
+ * `reason` is non-optional on purpose: a reschedule with no reason is exactly
+ * the kind of untraceable change the whole system exists to remove.
+ */
+export interface InterviewRescheduleEntry {
+  id: string;
+  interviewId: string;
+  /** ISO calendar date `YYYY-MM-DD` + 24h `HH:mm`, before and after. */
+  fromDate: string;
+  fromTime: string;
+  toDate: string;
+  toTime: string;
+  reason: string;
+  changedBy: PersonRef;
+  /** ISO-8601 timestamp. */
+  changedAt: string;
+}
+
+/**
+ * One interview round on one application. "Multiple interview rounds" (spec
+ * Sec 6) means a list of these per application, ordered by `roundNumber`.
+ *
+ * RECONCILIATION NOTE — proposed shape; the backend's `Interview` model is not
+ * written yet. Two deliberate choices:
+ *  - `scheduledDate` + `scheduledTime` are stored separately rather than as one
+ *    timestamp. Interview times are quoted to candidates in a local wall clock
+ *    ("Sunday 10:00 at the Gulshan office"); collapsing to UTC and formatting
+ *    back is how a 10:00 interview becomes a 04:00 one in a WhatsApp message.
+ *    If the backend stores a `DateTime`, it must also store the IANA zone.
+ *  - `evaluationFormId` is nullable and carries a denormalised
+ *    `evaluationFormName`. Evaluation forms are Phase 4 (BUILD_PLAN Sec 3.1
+ *    item 4); this field is the forward-declaration, not a live link.
+ */
+export interface InterviewRound {
+  id: string;
+  applicationId: string;
+  roundNumber: number;
+  /** Short human title, e.g. "Technical round". */
+  title: string;
+  scheduledDate: string;
+  /** 24-hour `HH:mm`. */
+  scheduledTime: string;
+  durationMinutes: number;
+  mode: InterviewMode;
+  /** Set when `mode === "IN_PERSON"`, else null. */
+  location: string | null;
+  /** Set when `mode === "ONLINE"`, else null. */
+  onlineLink: string | null;
+  panel: PersonRef[];
+  evaluationFormId: string | null;
+  evaluationFormName: string | null;
+  candidateInstructions: string;
+  status: InterviewStatus;
+  rescheduleHistory: InterviewRescheduleEntry[];
+  /** ISO-8601 timestamps. */
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/** Placeholder reference to a Phase 4 evaluation form. */
+export interface EvaluationFormRef {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/* ── Communication (spec Sec 6 > Communication, BUILD_PLAN Sec 2.8) ──────── */
+
+/**
+ * Spec Sec 6: "Drafted → Awaiting Approval → Approved → Sent → Delivered or
+ * Failed", locked again as the pipeline in BUILD_PLAN.md Sec 2.8.
+ */
+export const COMMUNICATION_STATUSES = [
+  "DRAFTED",
+  "AWAITING_APPROVAL",
+  "APPROVED",
+  "SENT",
+  "DELIVERED",
+  "FAILED",
+] as const;
+
+export type CommunicationStatus = (typeof COMMUNICATION_STATUSES)[number];
+
+export const COMMUNICATION_STATUS_LABELS: Record<CommunicationStatus, string> =
+  {
+    DRAFTED: "Drafted",
+    AWAITING_APPROVAL: "Awaiting approval",
+    APPROVED: "Approved",
+    SENT: "Sent",
+    DELIVERED: "Delivered",
+    FAILED: "Failed",
+  };
+
+/**
+ * One-line explanation of each state, shown next to the pill. Recruiters have
+ * to tell "Sent" and "Delivered" apart to know whether chasing is warranted,
+ * and the difference is entirely about who last confirmed what.
+ */
+export const COMMUNICATION_STATUS_MEANING: Record<CommunicationStatus, string> =
+  {
+    DRAFTED: "Saved on this application. Nobody has been asked to approve it.",
+    AWAITING_APPROVAL: "Waiting on a recruiter to approve it before it sends.",
+    APPROVED: "Approved and queued. The send worker will pick it up shortly.",
+    SENT: "Handed to the provider. Waiting on a delivery receipt.",
+    DELIVERED: "The provider confirmed the candidate received it.",
+    FAILED: "The provider rejected it. Nothing reached the candidate.",
+  };
+
+export const COMMUNICATION_CHANNELS = ["EMAIL", "WHATSAPP"] as const;
+
+export type CommunicationChannel = (typeof COMMUNICATION_CHANNELS)[number];
+
+export const COMMUNICATION_CHANNEL_LABELS: Record<
+  CommunicationChannel,
+  string
+> = {
+  EMAIL: "Email",
+  WHATSAPP: "WhatsApp",
+};
+
+/** The seven message kinds spec Sec 6 > Communication lists verbatim. */
+export const COMMUNICATION_EVENTS = [
+  "INTERVIEW_INVITATION",
+  "INTERVIEW_REMINDER",
+  "RESCHEDULING",
+  "DOCUMENT_REQUEST",
+  "SELECTION",
+  "REJECTION",
+  "JOINING_REMINDER",
+] as const;
+
+export type CommunicationEvent = (typeof COMMUNICATION_EVENTS)[number];
+
+export const COMMUNICATION_EVENT_LABELS: Record<CommunicationEvent, string> = {
+  INTERVIEW_INVITATION: "Interview invitation",
+  INTERVIEW_REMINDER: "Interview reminder",
+  RESCHEDULING: "Rescheduling",
+  DOCUMENT_REQUEST: "Document request",
+  SELECTION: "Selection",
+  REJECTION: "Rejection",
+  JOINING_REMINDER: "Joining reminder",
+};
+
+/**
+ * WhatsApp Business API template state (BUILD_PLAN.md key assumption 3):
+ * business-initiated WhatsApp messages only send against a Meta-approved
+ * template, so this is a real gate on the channel, not decoration.
+ */
+export const PROVIDER_APPROVAL_STATES = [
+  "NOT_REQUIRED",
+  "APPROVED",
+  "PENDING",
+] as const;
+
+export type ProviderApprovalState = (typeof PROVIDER_APPROVAL_STATES)[number];
+
+/**
+ * A versioned, field-allowlisted message template (BUILD_PLAN.md Sec 2.8).
+ * Recruiters pick one; they never compose free text against a candidate.
+ */
+export interface MessageTemplate {
+  id: string;
+  event: CommunicationEvent;
+  channel: CommunicationChannel;
+  name: string;
+  /** Template version — a template body is never edited in place. */
+  version: number;
+  /** Email only; null on WhatsApp templates. */
+  subject: string | null;
+  /** Body with `{{field.path}}` placeholders. */
+  body: string;
+  /**
+   * Exactly which context fields this template may interpolate.
+   * `internal_notes` and `rejection_reason` are structurally absent from every
+   * allowlist in the system — see `lib/communications/field-allowlist.ts`.
+   */
+  allowedFields: readonly string[];
+  providerApproval: ProviderApprovalState;
+}
+
+/** One drafted/sent candidate message on one application. */
+export interface Communication {
+  id: string;
+  applicationId: string;
+  templateId: string;
+  templateName: string;
+  templateVersion: number;
+  event: CommunicationEvent;
+  channel: CommunicationChannel;
+  /** Email address or mobile number, as addressed at draft time. */
+  recipient: string;
+  subject: string | null;
+  /** The rendered body, frozen at draft time — not re-rendered on display. */
+  renderedBody: string;
+  status: CommunicationStatus;
+  /** Provider-facing failure detail, shown only on `FAILED`. */
+  failureReason: string | null;
+  createdBy: PersonRef;
+  createdAt: string;
+  approvedBy: PersonRef | null;
+  approvedAt: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  /** Send attempts made by the worker (BUILD_PLAN.md Sec 2.8, bounded retry). */
+  attemptCount: number;
+  version: number;
+}
+
+/* ── Phase 3 reconciliation with the landed Prisma schema ────────────────── */
+
+/**
+ * The backend's Phase 3 models landed while this surface was being built. The
+ * differences below are real contract gaps, listed once here rather than
+ * scattered, and none of them is a rename this agent should decide unilaterally.
+ *
+ * ScreeningAssessment
+ *  1. `eligibility` is a `Boolean` server-side, a three-value enum here. The
+ *     third value ("eligible with reservation") is the one recruiters reach for
+ *     most: a candidate who clears the bar with a gap the panel should probe.
+ *     A boolean forces that into free-text comments where nothing can query it.
+ *     Either widen the column to an enum, or drop the middle value here.
+ *  2. `assessmentScore` is a bare `Float?` with no `assessmentMaxScore`. See
+ *     the note on `ScreeningAssessment` above — a score without its scale is
+ *     unreadable in a list.
+ *  3. `ScreeningAttendance` is `ATTENDED | NO_SHOW | RESCHEDULED`; this file
+ *     has `NOT_APPLICABLE | ATTENDED | ABSENT | LATE | RESCHEDULED`.
+ *     `NOT_APPLICABLE` matters because plenty of roles run no assessment and
+ *     "no attendance recorded" must not read as "did not turn up".
+ *     `LATE` is droppable; `ABSENT`/`NO_SHOW` is a pure rename.
+ *  4. `assessmentDocumentId` is a single `String? @unique`; this file models
+ *     `documents: DocumentRef[]`. A marked paper assessment is routinely two
+ *     files (answer sheet + marking sheet).
+ *  5. The model has no `version` column, so screening edits have no optimistic
+ *     lock even though two roles (recruiter, assessment evaluator) write to the
+ *     same row. `ScreeningForm` already sends and handles one.
+ *  6. `telephoneAssessmentOutcome` / `recommendation` / `assessmentType` /
+ *     `evaluatorRecommendation` are free `String?` server-side and closed enums
+ *     here — the same trade-off already flagged for `Requisition.positionLevel`.
+ *
+ * Interview
+ *  7. `scheduledAt` is a single `DateTime`; this file keeps `scheduledDate` +
+ *     `scheduledTime` as a local wall clock. See the RECONCILIATION NOTE on
+ *     `InterviewRound` — if the timestamp stays, it needs an accompanying IANA
+ *     zone, or a 10:00 interview becomes 04:00 in a WhatsApp message.
+ *  8. There is no `title` (round name) and no `mode`. Mode is currently implied
+ *     by which of `location`/`onlineLink` is non-null, which permits the
+ *     both-set and neither-set states the UI has no way to render.
+ *  9. `InterviewStatus` server-side lacks `NO_SHOW`.
+ *
+ * InterviewRescheduleHistory
+ * 10. `reason` is nullable. The spec requires rescheduling history to be
+ *     visible, and a history entry with no reason is exactly the untraceable
+ *     change this system exists to remove — `RescheduleForm` requires it, and
+ *     the column should be `String` (not null) to match.
+ *
+ * Communication / MessageTemplate
+ * 11. No `attemptCount` on `Communication`, so the retry affordance cannot say
+ *     how many sends have been tried or when the bounded retry is exhausted.
+ * 12. `MessageTemplate.category` (a `MessageTemplateCategory` enum) is this
+ *     file's `event`; confirm the member names line up with
+ *     `COMMUNICATION_EVENTS` before wiring.
+ * 13. `Communication` has no `recipient` column — the address is presumably
+ *     derived from the candidate at send time. The draft UI lets a recruiter
+ *     override it for one message (a candidate who asks to be emailed at work),
+ *     which needs a column to live in.
+ * 14. Field naming: `renderedSubject`/`draftedBy` server-side vs
+ *     `subject`/`createdBy` here. Pure rename either way.
+ */
+
 /* ── Reconciliation with the Home task queue ─────────────────────────────── */
 
 /**

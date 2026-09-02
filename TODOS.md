@@ -79,3 +79,43 @@ lands.
 **Depends on / blocked by:** Nothing — ready to pick up. Do the
 reconciliation decisions above first (as small BUILD_PLAN.md/domain.ts
 edits), then rewire each documented swap point.
+
+## Phase 3 frontend: wire mock data to the real API
+
+**What:** Same situation as Phase 2, one phase later. Screening,
+Interview scheduling/rescheduling, and the message-template/
+communication draft-approve-send flow were built against typed mock
+data (`app/(dashboard)/_mock-screening.ts`, `_mock-interviews.ts`,
+`_mock-communications.ts`) with documented swap points. The real API
+now exists and is verified working (including the field-allowlist
+security property — `internal_notes`/`rejection_reason` cannot reach a
+candidate-facing message, confirmed at the create-template layer via
+the live smoke test) — the page-level fetches are not yet rewired.
+
+**Real gaps the frontend agent flagged, worth fixing before/while
+wiring:**
+- `ScreeningAssessment` has no `version` column despite being editable
+  — needs one for the same optimistic-locking reason every other
+  mutable resource has it.
+- `InterviewRescheduleHistory.reason` is nullable in Prisma but the UI
+  treats it as required (an untraceable reschedule defeats the point of
+  the history table) — make it non-null, or accept free rescheduling
+  and drop the UI requirement.
+- No `attemptCount`/max-attempts exposed on `Communication` for the
+  retry-affordance UI to reason about ("3 send attempts, give up").
+- `roundNumber` on Interview should be assigned server-side in a
+  transaction (client-computed round numbers race under concurrent
+  scheduling).
+- Prisma `Role` has no `PANEL_MEMBER`-equivalent distinct from the
+  existing `PANEL_MEMBER` enum value — confirm `/api/v1/users?role=`
+  supports a multi-value filter for interview panel pickers, or the
+  frontend's panel-member picker needs a different lookup.
+- `eligibility` is a `Boolean` server-side; the frontend argues for a
+  3-value enum (eligible / not eligible / eligible with reservation) —
+  same class of decision as `positionLevel` in the Phase 2 backlog
+  item above, worth resolving together.
+
+**Depends on / blocked by:** Nothing — ready to pick up alongside the
+Phase 2 wiring item above (same kind of work, same reason it was
+deferred: two independently-built contracts need one deliberate
+reconciliation pass rather than three separate hasty ones).
