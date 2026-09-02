@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 (Foundations): org structure, auth/RBAC, audit log, documents,
+// break-glass confidential-data grants. Recruitment-domain models
+// (Requisition/Candidate/Application/etc.) land in later phases per
+// BUILD_PLAN.md Sec 3.1 — do not add them here yet.
+// ---------------------------------------------------------------------------
+
+enum Role {
+  TA_ADMIN
+  RECRUITER
+  DEPT_HEAD
+  HIRING_MANAGER
+  PANEL_MEMBER
+  HR_LEADERSHIP
+  AUDIT_USER
+  TECH_ADMIN
+}
+
+model BusinessUnit {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  departments Department[]
+  users       User[]
+
+  @@map("business_units")
+}
+
+model Department {
+  id             String       @id @default(cuid())
+  name           String
+  businessUnitId String
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  users          User[]
+
+  @@unique([businessUnitId, name])
+  @@map("departments")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  name           String
+  role           Role
+  businessUnitId String?
+  businessUnit   BusinessUnit? @relation(fields: [businessUnitId], references: [id])
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id])
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  sessions              Session[]
+  auditLogs             AuditLog[]
+  confidentialGrants    ConfidentialDataGrant[] @relation("GrantRecipient")
+  grantsIssued          ConfidentialDataGrant[] @relation("GrantIssuer")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// Break-glass elevation grant: confidential fields (CV contents, scores,
+// personal contact info) are hidden by default even from Technical
+// Administrators. Every grant + access under it is written to AuditLog.
+model ConfidentialDataGrant {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("GrantRecipient", fields: [userId], references: [id])
+  grantedById String
+  grantedBy   User      @relation("GrantIssuer", fields: [grantedById], references: [id])
+  reason      String
+  scope       String // e.g. "application:{id}" or "global" — kept as a string tag for MVP
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+  @@map("confidential_data_grants")
+}
+
+// Append-only. No UPDATE/DELETE application-level path is exposed —
+// enforced in lib/audit.ts, and DB role privileges should mirror this
+// in production (see BUILD_PLAN.md Sec 2.3).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum DocumentOwnerType {
+  CANDIDATE
+  APPLICATION
+  REQUISITION
+  SCREENING_ASSESSMENT
+  EVALUATION
+  JOINING_CHECKLIST_ITEM
+}
+
+// Never stores the file itself — storageKey points at the S3-compatible
+// object store. Upload/download both go through presigned URLs.
+model Document {
+  id          String            @id @default(cuid())
+  ownerType   DocumentOwnerType
+  ownerId     String
+  storageKey  String            @unique
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  uploadedById String
+  createdAt   DateTime          @default(now())
+
+  @@index([ownerType, ownerId])
+  @@map("documents")
+}
