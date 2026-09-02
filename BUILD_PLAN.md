@@ -238,7 +238,9 @@ REST, versioned at the path (`/api/v1/...`), resource-oriented
 Consistent envelope: `{ success, data, error, meta }` (meta carries
 pagination for list endpoints). Every mutating endpoint requires the
 resource's current `version` field (optimistic locking) and returns 409
-on mismatch so the client can reload and retry.
+on mismatch so the client can reload and retry. `error` is
+`{ code, message }` (not a bare string) — locked during Phase 1
+implementation, see `lib/api-response.ts`.
 
 ### 2.5 Authentication and authorization design
 - Server-side authorization on every route — the client's role-based
@@ -491,3 +493,37 @@ Start Phase 1 (Foundations) exactly as scoped in Sec 3.1 above:
 Do not scaffold Phase 2+ modules until Phase 1 is working end-to-end
 (a fresh session should verify Foundations before moving on, per the
 dependency table in Sec 3.2).
+
+---
+
+## Phase 1 status: complete (2026-09-02)
+
+Built by a parallel backend + frontend agent pair, wired together and
+verified end-to-end (typecheck, `npm run build`, live login → session
+→ role-gated dashboard → logout against the running dev server).
+
+**Implementation notes not otherwise captured above:**
+- Session cookie: `tf_session`, httpOnly, `sameSite=lax`, `secure`
+  outside `NODE_ENV=development`, 7-day TTL, DB-backed token (not a
+  JWT) — `lib/session.ts`.
+- Document download authz is a pluggable hook
+  (`registerDocumentDownloadAuthzChecker` in `lib/documents.ts`),
+  fail-closed by default. **No `DocumentOwnerType` has a checker
+  registered yet** — every later module (Candidates, Requisitions,
+  Evaluations, Joining) must register one for its owner type before
+  its documents become downloadable. Track this per-module, not as one
+  follow-up.
+- Local dev seed admin: `ta.admin@anwargroup.test` /
+  `TalentFlow!2026` (`npm run db:seed`) — TA_ADMIN role, seeded under
+  "Anwar Group Corporate" / "Talent Acquisition".
+- MinIO bucket `talentflow-documents` is not auto-provisioned by
+  anything in the app yet — created manually for local dev. A setup
+  script or compose init step should do this before onboarding another
+  developer.
+- Local port notes: native Postgres already runs on 5432 and native
+  Redis on 6379 on this machine, so `docker-compose.yml` maps the
+  Postgres container to host port **5433** and reuses the native Redis
+  instance directly — `.env`/`.env.example` reflect this. MinIO is
+  unaffected (9000/9001).
+
+Next: Phase 2 (Requisition → Candidate, Sec 3.1 item 2).
