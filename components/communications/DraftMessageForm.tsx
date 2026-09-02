@@ -89,6 +89,7 @@ export function DraftMessageForm({
   interviews,
   context,
   currentUser,
+  initialEvent,
   onDrafted,
   onCancel,
 }: {
@@ -101,13 +102,37 @@ export function DraftMessageForm({
     "interview" | "documentRequestList" | "joiningDate"
   >;
   currentUser: PersonRef;
+  /**
+   * Preselects the message purpose when the recruiter arrived from somewhere
+   * that already knows it — currently the Decision tab's post-approval prompt
+   * (Phase 5), which sends `SELECTION` or `REJECTION`.
+   *
+   * Deliberately the ONLY thing that entry point passes. It carries no body, no
+   * prefilled text and, above all, no reason: the approving/rejecting manager's
+   * comments are internal, and the spec is explicit that internal notes and
+   * rejection reasons must never appear automatically in a candidate message.
+   * That guarantee is structural rather than a habit — the body is rendered
+   * server-side from a versioned template against a field allowlist
+   * (`lib/communications/field-allowlist.ts`) that contains no field an
+   * internal reason could occupy — but the entry point stays narrow anyway, so
+   * nobody has to re-derive the guarantee to review this form.
+   *
+   * The recruiter can still change the selection; it is a starting point, not a
+   * lock. Locking it would mean a recruiter who opened the wrong prompt has to
+   * back out and start again.
+   */
+  initialEvent?: CommunicationEvent;
   onDrafted: (communication: Communication) => void;
   onCancel: () => void;
 }) {
   const prefix = useId();
 
-  const [event, setEvent] = useState<string>("");
-  const [templateId, setTemplateId] = useState<string>("");
+  const [event, setEvent] = useState<string>(initialEvent ?? "");
+  const [templateId, setTemplateId] = useState<string>(
+    initialEvent
+      ? (templates.find((entry) => entry.event === initialEvent)?.id ?? "")
+      : "",
+  );
   const [interviewId, setInterviewId] = useState<string>(
     interviews.at(-1)?.id ?? "",
   );

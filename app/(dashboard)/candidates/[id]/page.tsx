@@ -11,6 +11,7 @@ import {
   USER_ROLE_LABELS,
   type StageHistoryEntry,
 } from "@/lib/types/domain";
+import { getApplicationApproval } from "../../_mock-approvals";
 import {
   getMockCandidate,
   getMockStageHistory,
@@ -102,6 +103,12 @@ export default async function CandidateWorkspacePage({
   //   GET /api/v1/applications/{id}/screening        (404 = not recorded yet)
   //   GET /api/v1/applications/{id}/interviews
   //   GET /api/v1/applications/{id}/communications
+  //   GET /api/v1/applications/{id}/approval-request   (404 = not started yet)
+  //   GET /api/v1/approval-chain-configs?businessUnitId=&departmentId=
+  //                                      &positionLevel=
+  //     — both behind `getApplicationApproval`; see `_mock-approvals.ts` for
+  //       the full contract, including which non-200s are expected states
+  //       rather than failures.
   // `department`/`businessUnit` come from the application's requisition
   // (GET /api/v1/requisitions/{id}); they are carried here because the message
   // templates interpolate them and `ApplicationSummary` does not hold them.
@@ -120,6 +127,10 @@ export default async function CandidateWorkspacePage({
             // A blinded viewer's props contain no peer evaluation at all.
             evaluationRounds: getEvaluationRounds(interviews, viewer),
             communications: getMockCommunications(application.id),
+            // Resolved here for the same reason: `viewerDecidableStepId` is an
+            // authorization answer, and the client is never the thing that
+            // answers it.
+            approval: getApplicationApproval(application, viewer),
             department: requisition?.department.name ?? "—",
             businessUnit: requisition?.businessUnit.name ?? "—",
           } satisfies ApplicationDetail,
@@ -185,6 +196,7 @@ export default async function CandidateWorkspacePage({
             sectionsConfig={sectionsConfig}
             people={people}
             currentUser={viewer}
+            viewerId={override ? override.id : undefined}
           />
         </div>
 

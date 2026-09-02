@@ -642,3 +642,113 @@ fields, missing `EVALUATION` document-authz checker) tracked in
 `TODOS.md` alongside the Phase 2/3 items.
 
 Next: Phase 5 (Approval + Decision, Sec 3.1 item 5).
+
+---
+
+## Phase 5 status: backend + frontend complete, wiring pending (2026-09-02)
+
+Backend added `ApprovalChainConfig`/`ApprovalChainStep`/`ApprovalRequest`/
+`ApprovalDecision` models and `lib/approval-chain.ts` (mirroring
+`lib/requisition-status.ts`'s "one file owns the transition graph"
+style). This is the candidate/application SELECTION-decision approval
+chain — a deliberately separate flow from `Requisition.approvalStatus`
+(Phase 2's requisition approval, already built).
+
+**Schema-shape decision (ordered approver list):** a relational
+`ApprovalChainStep` join table with a `sequence` int column, not a JSON
+array on `ApprovalChainConfig`. Chosen because `recordDecision()` needs
+to look up "the step at index N" directly and queryably (each
+`ApprovalDecision` snapshots `approverRole` from the corresponding step),
+which a JSON blob would only support after deserializing — the extra
+join is cheap given chain resolution happens once per application
+reaching APPROVAL, not on any hot path.
+
+**Uniqueness note:** "only one active chain per (businessUnitId,
+departmentId, positionLevel)" is enforced in application logic
+(`approval-chain-configs` POST route deactivates any prior active row
+for the same triple inside the same transaction that creates the new
+one), not a DB-level unique constraint — a literal unique on
+`(..., isActive)` would also cap historical/inactive rows for a triple
+at one, defeating history across chain revisions. Prisma doesn't support
+partial (`WHERE isActive`) unique indexes without a raw-SQL migration
+extension; revisit if this proves insufficient.
+
+**Out-of-order-decision policy:** sequential only. `recordDecision()`
+requires the decided `stepIndex` to match `ApprovalRequest.currentStepIndex`
+exactly (409 `NOT_CURRENT_STEP` otherwise) — the safer default matching
+Sec 2.9's "ordered list of approver roles"; nothing in the PDF calls for
+parallel/out-of-order approval.
+
+**ApprovalDecision rows are created UPFRONT** (all steps at once, at
+`initiateApprovalRequest()` time), not lazily as each step is reached —
+per the PDF's "Decisions and Approvals" visibility language, "step 3 of
+5, waiting on Dept Head" must be directly queryable the instant a
+request is initiated, mirroring the blind-until-submit `Evaluation`
+row's "one query-layer rule" philosophy from Phase 4.
+
+A single rejection at any step immediately marks the whole
+`ApprovalRequest` REJECTED — later steps' `ApprovalDecision` rows stay
+PENDING (informative: "never reached"), never auto-continuing past a
+rejection.
+
+API routes: `approval-chain-configs` (GET list/filter, POST — TA_ADMIN/
+TECH_ADMIN only), `applications/:id/approval-request` (POST initiate —
+TA_ADMIN/RECRUITER, returns 400 `NO_CHAIN_CONFIGURED` — not a 500 — when
+no chain resolves for the application's business unit/department/
+position level; GET — fetches the latest request + all decision rows in
+one call), `approval-requests/:id/decide` (POST — gated only by
+`requireAuth()` at the route level, since the required role differs per
+step; `recordDecision()` itself checks the caller's role against that
+step's snapshotted `approverRole` and returns 403 `WRONG_ROLE` on
+mismatch).
+
+Confirmed unchanged: Phase 3's `POST /api/v1/applications/:id/communications`
+already works for `SELECTION`/`REJECTION` categories with no code
+changes needed — `MessageTemplateCategory` already had both values from
+Phase 3, and the route is generic over category. Also confirmed
+`lib/application-stages.ts` already allows `APPROVAL -> SELECTED` and
+`APPROVAL -> REJECTED` (via its `ALWAYS_REACHABLE_OUTCOMES` list) — no
+change needed there either, so the `PATCH /applications/:id/stage` route
+was reused as-is per the task's "do not duplicate that logic" constraint.
+
+Verified live end-to-end on port 3108 against a throwaway DEPT_HEAD test
+user + a 2-step (DEPT_HEAD -> TA_ADMIN) chain: decision rows exist for
+every step immediately after initiation; a wrong-role decide attempt at
+step 0 was rejected (403 `WRONG_ROLE`); the correct role's approval
+advanced `currentStepIndex`; a rejection at step 1 on a second scenario
+immediately flipped the whole request to REJECTED without touching later
+steps; a second, independent approval request where every step approved
+reached `APPROVED`; a further decide attempt on a closed request
+correctly returned 400 `REQUEST_CLOSED`; the SELECTED stage transition
+and a SELECTION-category communication draft both worked unchanged. All
+test rows (application, candidate, requisition, chain config/steps,
+approval requests/decisions, communication, message template, throwaway
+user) were cleaned up afterward.
+
+`npx tsc --noEmit` and `npm run build` both pass clean. Frontend's
+approval-chain/decision UI was being built concurrently against mock
+data by a separate agent (see `app/(dashboard)/_mock-evaluations.ts`,
+`app/(dashboard)/_mock-reference.ts`, `components/ui/SegmentedTrack.tsx`,
+`lib/types/approvals.ts`, and edits to `StagePipeline.tsx`/
+`StatusPill.tsx`/`tone.ts` — none of these were touched by this backend
+pass); wiring that frontend to these real routes is tracked in
+`TODOS.md` alongside the Phase 2/3/4 wiring items.
+
+Frontend added a 6th application tab ("Decision") composing Phase 3's
+screening summary and Phase 4's `EvaluationSummaryPanel`/panel-feedback
+pieces rather than rebuilding them, plus the new approval-chain-progress
+stepper and a confirm-gated approve/reject action (mirroring Phase 3's
+communication-approval ceremony, with comments required on reject).
+This agent run was interrupted by a stream stall mid-refactor — it had
+just finished adding an `EvaluationSummaryPanel` `variant="composed"`
+prop to stop the per-round intro paragraph and screening-tab pointer
+from repeating on the Decision tab (which already states both once,
+above the per-round list), but the `composed` variant only gated the
+intro paragraph, and the Decision tab's call site never actually passed
+`variant="composed"`. Both finished after the fact: the "Assessment
+results" block is now also gated on `standalone`, and
+`DecisionSupport.tsx` passes `variant="composed"`. Verified with a fresh
+`npx tsc --noEmit` + `npm run build` (both clean) and a live page render
+(200, no error digests) after the fix.
+
+Next: Phase 6 (Joining Coordination, Sec 3.1 item 6).

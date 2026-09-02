@@ -156,3 +156,29 @@ blind-until-submit query-layer rule.
 Phase 2/3 wiring items. Consider doing all three in one pass once
 Phase 5+ stabilizes further, since later phases may add their own
 mock-data layers on top of the same pattern.
+
+## Phase 5 frontend: wire mock data to the real API
+
+**What:** Same situation as Phases 2/3/4. A frontend agent was building
+the approval-chain-config and decision UI concurrently against mock
+data (`lib/types/approvals.ts`, `components/ui/SegmentedTrack.tsx`, plus
+edits to `StagePipeline.tsx`/`StatusPill.tsx`/`tone.ts`) while this
+backend pass landed. The real API now exists and is independently
+verified live: `POST/GET /api/v1/approval-chain-configs`,
+`POST/GET /api/v1/applications/:id/approval-request`,
+`POST /api/v1/approval-requests/:id/decide` — see the Phase 5 status
+section in `BUILD_PLAN.md` for the schema-shape/policy decisions
+(ordered-step join table, sequential-only decisions, upfront decision
+rows) and the exact smoke-test scenarios that passed.
+
+**Likely reconciliation points, based on the pattern from Phases 2-4**
+(not yet confirmed against the actual frontend contract — check
+`lib/types/approvals.ts` first): whether the frontend's mock chain/step
+shape matches `ApprovalChainConfig.steps` (ordered join rows keyed by
+`sequence`) vs. some other ordered-list representation; whether
+`positionLevel` free-string vs. enum resurfaces here too (same class of
+gap flagged in the Phase 2/3 items above — `ApprovalChainConfig.
+positionLevel` is a free `String` to match `Requisition.positionLevel`).
+
+**Depends on / blocked by:** Nothing — ready to pick up alongside the
+Phase 2/3/4 wiring items.

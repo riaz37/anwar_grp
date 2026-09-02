@@ -644,6 +644,17 @@ export function writeOwnEvaluation(
  *   ?as=usr_hm_1       Kamrul Hasan, HIRING_MANAGER
  *                                                — never blinded, and his own
  *                                                  submitted record is locked
+ *
+ * Phase 5 reuses the same switch for the Decision tab, where the approve/reject
+ * action only appears for the viewer whose role the chain is currently blocked
+ * on. On `/candidates/cand_2177`:
+ *   (default)          Sadia Karim, RECRUITER    — sees the chain, can start
+ *                                                  one, cannot decide
+ *   ?as=usr_hrl_1      Rowshan Ara, HR_LEADERSHIP
+ *                                                — the chain's current step is
+ *                                                  hers: approve/reject shown
+ *   ?as=usr_panel_1    Farzana Haque, DEPT_HEAD  — her step is already decided,
+ *                                                  so no action
  */
 export const MOCK_VIEWERS: readonly Viewer[] = [
   { id: "usr_recruiter_1", name: "Sadia Karim", role: "RECRUITER" },
@@ -651,6 +662,9 @@ export const MOCK_VIEWERS: readonly Viewer[] = [
   { id: "usr_panel_4", name: "Marufa Begum", role: "PANEL_MEMBER" },
   { id: "usr_hm_1", name: "Kamrul Hasan", role: "HIRING_MANAGER" },
   { id: "usr_hm_4", name: "Nusrat Jahan", role: "HIRING_MANAGER" },
+  { id: "usr_panel_1", name: "Farzana Haque", role: "DEPT_HEAD" },
+  { id: "usr_hrl_1", name: "Rowshan Ara", role: "HR_LEADERSHIP" },
+  { id: "usr_ta_admin_1", name: "Iftekhar Alam", role: "TA_ADMIN" },
 ];
 
 export function resolveViewer(userId: string | undefined): Viewer | null {

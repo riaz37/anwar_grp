@@ -40,30 +40,54 @@ import {
 export function EvaluationSummaryPanel({
   summary,
   onOpenScreening,
+  idPrefix = "evaluation-summary",
+  heading = "Consolidated results",
+  variant = "standalone",
 }: {
   summary: EvaluationSummaryView;
   /** Switches the application to its Screening tab — the spec's "assessment
    *  results" already live there and are not duplicated here. */
   onOpenScreening?: () => void;
+  /**
+   * Added in Phase 5: the Decision tab renders one of these per interview
+   * round, so the heading id can no longer be a constant without colliding.
+   * The Evaluations tab renders one at a time and keeps the default.
+   */
+  idPrefix?: string;
+  /** Overridden on the Decision tab, where the round number is the heading. */
+  heading?: string;
+  /**
+   * `composed` drops the two framing blocks — the "this is a summary, not a
+   * verdict" paragraph and the pointer at the Screening tab — because the
+   * Decision tab states both once, above, and a page that says them three
+   * times (once per round) trains people to stop reading them. The claims are
+   * not weakened, only deduplicated: the Decision tab's own intro carries the
+   * same "TalentFlow does not weigh any of it" sentence, and its Screening and
+   * assessment section carries the same link.
+   */
+  variant?: "standalone" | "composed";
 }) {
   const complete = summary.missingFeedback.length === 0;
+  const standalone = variant === "standalone";
 
   return (
     <section
-      aria-labelledby="evaluation-summary-heading"
+      aria-labelledby={`${idPrefix}-heading`}
       className="flex max-w-[var(--container-form)] flex-col gap-lg"
     >
       <div>
-        <h4 id="evaluation-summary-heading" className="text-subhead text-text">
-          Consolidated results
+        <h4 id={`${idPrefix}-heading`} className="text-subhead text-text">
+          {heading}
         </h4>
-        <p className="mt-2xs max-w-[62ch] text-body-sm text-muted">
-          Everything the panel recorded for this round, in one place. This is a
-          summary for you to read — TalentFlow does not weigh it, rank it, or
-          recommend an outcome. The decision is yours and the hiring
-          manager&rsquo;s, and it is recorded by moving the application on the
-          Pipeline tab.
-        </p>
+        {standalone && (
+          <p className="mt-2xs max-w-[62ch] text-body-sm text-muted">
+            Everything the panel recorded for this round, in one place. This is
+            a summary for you to read — TalentFlow does not weigh it, rank it,
+            or recommend an outcome. The decision is yours and the hiring
+            manager&rsquo;s, and it is recorded by moving the application on the
+            Pipeline tab.
+          </p>
+        )}
       </div>
 
       <dl className="grid grid-cols-1 gap-md sm:grid-cols-3">
@@ -267,25 +291,27 @@ export function EvaluationSummaryPanel({
         )}
       </div>
 
-      <div className="border-t border-border pt-lg">
-        <h5 className="text-body font-semibold text-text">
-          Assessment results
-        </h5>
-        <p className="mt-sm max-w-[62ch] text-body-sm text-muted">
-          The screening call and any paper or practical assessment are recorded
-          on this application&rsquo;s Screening tab, and are not copied here —
-          one record, one place to correct it.
-        </p>
-        {onOpenScreening && (
-          <button
-            type="button"
-            onClick={onOpenScreening}
-            className="mt-sm inline-flex min-h-11 items-center rounded-sm text-body-sm font-medium text-accent-ink underline decoration-transparent underline-offset-2 transition-colors duration-100 ease-move hover:decoration-current"
-          >
-            Open the Screening tab
-          </button>
-        )}
-      </div>
+      {standalone && (
+        <div className="border-t border-border pt-lg">
+          <h5 className="text-body font-semibold text-text">
+            Assessment results
+          </h5>
+          <p className="mt-sm max-w-[62ch] text-body-sm text-muted">
+            The screening call and any paper or practical assessment are
+            recorded on this application&rsquo;s Screening tab, and are not
+            copied here — one record, one place to correct it.
+          </p>
+          {onOpenScreening && (
+            <button
+              type="button"
+              onClick={onOpenScreening}
+              className="mt-sm inline-flex min-h-11 items-center rounded-sm text-body-sm font-medium text-accent-ink underline decoration-transparent underline-offset-2 transition-colors duration-100 ease-move hover:decoration-current"
+            >
+              Open the Screening tab
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

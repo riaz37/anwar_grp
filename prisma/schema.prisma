@@ -90,6 +90,11 @@ model User {
   evaluationFormTemplatesCreated EvaluationFormTemplate[] @relation("EvaluationFormTemplateCreatedBy")
   evaluationsAsPanelist          Evaluation[]             @relation("EvaluationPanelist")
 
+  // Phase 5 (Approval + Decision) relations.
+  approvalChainConfigsCreated ApprovalChainConfig[] @relation("ApprovalChainConfigCreatedBy")
+  approvalRequestsInitiated   ApprovalRequest[]     @relation("ApprovalRequestInitiatedBy")
+  approvalDecisionsMade       ApprovalDecision[]    @relation("ApprovalDecisionDecidedBy")
+
   @@map("users")
 }
 
@@ -289,6 +294,9 @@ model Application {
   screeningAssessments ScreeningAssessment[]
   interviews           Interview[]
   communications       Communication[]
+
+  // Phase 5 relations.
+  approvalRequests ApprovalRequest[]
 
   @@index([assignedRecruiterId])
   @@index([currentStage])
@@ -643,4 +651,155 @@ model Evaluation {
   @@index([interviewId])
   @@index([panelistId])
   @@map("evaluations")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 (Approval + Decision): BUILD_PLAN.md Sec 3.1 item 5 / Sec 2.9
+// (LOCKED design: ApprovalChainConfig maps (business_unit_id,
+// department_id, position_level) -> an ordered list of approver roles;
+// "adding/changing a chain is a data change, not a deploy"). This is
+// explicitly NOT a general-purpose workflow engine (BUILD_PLAN's
+// "Features intentionally excluded" list) — no conditional branching, no
+// dynamic step insertion. Joining (Phase 6) is deliberately not modeled
+// here.
+// ---------------------------------------------------------------------------
+
+// Ordered approver-role list, schema-shape decision: ApprovalChainStep
+// join table with a `sequence` int column (NOT a JSON array on
+// ApprovalChainConfig). Chosen over JSON because "who approves at step
+// N" needs to be directly queryable/indexable (ApprovalDecision snapshots
+// approverRole per step, and recordDecision() needs to look up "the step
+// at index N for this chain" without deserializing/parsing a JSON blob),
+// and because a relational step table is easier to eventually inspect/
+// audit ("show me every chain that has TA_ADMIN at step 2") than a JSON
+// array would be. The tradeoff is one extra table + a join on chain
+// resolution — acceptable given approval-chain lookups are low-volume
+// (once per application reaching APPROVAL) and not on any hot path.
+model ApprovalChainConfig {
+  id             String   @id @default(cuid())
+  businessUnitId String
+  departmentId   String
+  // Free String to match Requisition.positionLevel's existing type
+  // (Phase 2 kept it a free string, not an enum) — a chain config must be
+  // able to key off exactly the same value a Requisition/Application
+  // carries.
+  positionLevel  String
+  // Only one ACTIVE chain per (businessUnitId, departmentId,
+  // positionLevel) should exist at a time. Design decision: this is
+  // enforced in application logic (lib/approval-chain.ts's create path
+  // deactivates any prior active row for the same triple inside the same
+  // transaction that creates the new one), NOT a DB-level unique
+  // constraint — a true unique on (businessUnitId, departmentId,
+  // positionLevel, isActive) would also cap the number of INACTIVE
+  // (historical, superseded) rows for a triple at one, which defeats
+  // keeping history across multiple chain revisions. Postgres partial
+  // unique indexes (`WHERE isActive`) would solve this cleanly but
+  // aren't expressible in the Prisma schema without a raw-SQL migration
+  // extension; revisit if this ever proves insufficient in practice.
+  // `version` increments each time a triple's chain is superseded.
+  isActive       Boolean  @default(true)
+  version        Int      @default(1)
+  createdById    String
+  createdBy      User     @relation("ApprovalChainConfigCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  steps            ApprovalChainStep[]
+  approvalRequests ApprovalRequest[]
+
+  @@index([businessUnitId, departmentId, positionLevel, isActive])
+  @@map("approval_chain_configs")
+}
+
+// One row per step of the ordered approver-role list. `sequence` is
+// 0-based to match ApprovalRequest.currentStepIndex/
+// ApprovalDecision.stepIndex directly (no off-by-one translation
+// anywhere in lib/approval-chain.ts).
+model ApprovalChainStep {
+  id            String              @id @default(cuid())
+  chainConfigId String
+  chainConfig   ApprovalChainConfig @relation(fields: [chainConfigId], references: [id], onDelete: Cascade)
+  sequence      Int
+  approverRole  Role
+  createdAt     DateTime            @default(now())
+
+  @@unique([chainConfigId, sequence])
+  @@index([chainConfigId])
+  @@map("approval_chain_steps")
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+// The candidate-SELECTION approval, tied to an Application — a
+// deliberately separate flow from Requisition.approvalStatus (Phase 2's
+// requisition-approval, already built; do not confuse the two per
+// BUILD_PLAN.md). One Application may have more than one ApprovalRequest
+// over time (e.g. a WITHDRAWN/REJECTED request followed by a fresh one
+// after re-evaluation) — no uniqueness constraint forces "at most one
+// ever," only the application layer's own judgment about when it's
+// sensible to initiate another.
+model ApprovalRequest {
+  id               String                @id @default(cuid())
+  applicationId    String
+  application      Application           @relation(fields: [applicationId], references: [id])
+  // Snapshot of which chain applied at initiation time — later edits to
+  // ApprovalChainConfig (or its steps) never retroactively change an
+  // in-flight or historical ApprovalRequest, mirroring the
+  // Communication.renderedBody snapshot pattern from Phase 3.
+  chainConfigId    String
+  chainConfig      ApprovalChainConfig   @relation(fields: [chainConfigId], references: [id])
+  currentStepIndex Int                   @default(0)
+  status           ApprovalRequestStatus @default(PENDING)
+  initiatedById    String
+  initiatedBy      User                  @relation("ApprovalRequestInitiatedBy", fields: [initiatedById], references: [id])
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  decisions ApprovalDecision[]
+
+  @@index([applicationId])
+  @@index([status])
+  @@map("approval_requests")
+}
+
+enum ApprovalDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Design decision: ApprovalDecision rows are created UPFRONT (all steps
+// at once, when the ApprovalRequest is initiated) rather than lazily as
+// each step is reached. Chosen because the PDF's "Decisions and
+// Approvals" visibility language ("recruiters should see... missing
+// feedback") argues for the same style of upfront visibility as
+// blind-until-submit Evaluation rows — "step 3 of 5, waiting on Dept
+// Head" must be directly queryable the moment the request is initiated,
+// not reconstructed by inferring what future steps *would* be from the
+// chain config. `approverRole` is snapshotted per row for the same
+// reason as ApprovalRequest.chainConfigId — a later chain edit must not
+// silently change who was recorded as responsible for a past decision.
+model ApprovalDecision {
+  id                String                 @id @default(cuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest        @relation(fields: [approvalRequestId], references: [id])
+  stepIndex         Int
+  approverRole      Role
+  decidedById       String?
+  decidedBy         User?                  @relation("ApprovalDecisionDecidedBy", fields: [decidedById], references: [id])
+  decision          ApprovalDecisionStatus @default(PENDING)
+  comments          String?
+  decidedAt         DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([approvalRequestId, stepIndex])
+  @@index([approvalRequestId])
+  @@map("approval_decisions")
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DecisionSection } from "@/components/approvals/DecisionSection";
 import { CommunicationsSection } from "@/components/communications/CommunicationsSection";
 import { EvaluationsSection } from "@/components/evaluations/EvaluationsSection";
 import { InterviewsSection } from "@/components/interviews/InterviewsSection";
@@ -11,11 +12,13 @@ import {
   type SectionTab,
 } from "@/components/ui/SectionTabs";
 import type { MessageContextInput } from "@/lib/communications/build-context";
+import { awaitingStep, type ApplicationApproval } from "@/lib/types/approvals";
 import { ownEvaluationState } from "@/lib/types/domain";
 import type {
   ApplicationStage,
   ApplicationSummary,
   Communication,
+  CommunicationEvent,
   EvaluationFormRef,
   InterviewEvaluationRound,
   InterviewRound,
@@ -28,10 +31,10 @@ import type {
 import { ApplicationOverview } from "./ApplicationOverview";
 
 /**
- * Everything about one application, as five sibling views rather than one
+ * Everything about one application, as six sibling views rather than one
  * page.
  *
- * Pipeline, Screening, Interviews, Evaluations and Messages are all answers to
+ * Pipeline, Screening, Interviews, Evaluations, Decision and Messages are all answers to
  * "what is the state of this application" — they belong together, which is why
  * they are sections of the application rather than five places in the
  * left-hand navigation. Stacked vertically they run well past six screens of
@@ -49,9 +52,17 @@ import { ApplicationOverview } from "./ApplicationOverview";
  * different moments — a recruiter coordinating dates is not the panelist
  * writing feedback — and nesting a second tab strip inside the Interviews tab
  * would put three levels of tabs on one screen.
+ *
+ * Decision sits between Evaluations and Messages (Phase 5) because that is the
+ * order the work happens in: the panel writes feedback, somebody signs the hire
+ * off, and only then does the candidate get told. It is a tab rather than a
+ * section of the Pipeline tab because it answers a different question — "should
+ * we hire this person, and who has agreed" rather than "where is this
+ * application" — and because the approval chain has an action on it for people
+ * (department heads, HR leadership) who never touch the pipeline controls.
  */
 
-/** Everything the four non-pipeline sections need, gathered per application. */
+/** Everything the five non-pipeline sections need, gathered per application. */
 export interface ApplicationDetail {
   screening: ScreeningAssessment | null;
   interviews: InterviewRound[];
@@ -60,6 +71,9 @@ export interface ApplicationDetail {
    *  before this data reaches the client at all. */
   evaluationRounds: InterviewEvaluationRound[];
   communications: Communication[];
+  /** The approval chain and any request on it, already resolved for the viewer
+   *  (Phase 5). Null when the application's requisition could not be read. */
+  approval: ApplicationApproval | null;
   /** Requisition fields the application summary does not carry. */
   department: string;
   businessUnit: string;
@@ -81,6 +95,7 @@ export function ApplicationPanel({
   detail,
   config,
   currentUser,
+  viewerId,
   onApplied,
 }: {
   application: ApplicationSummary;
@@ -91,6 +106,10 @@ export function ApplicationPanel({
   /** Widened from `PersonRef` in Phase 4: the evaluation surface is
    *  role-conditional, and "who is looking" is now part of every read. */
   currentUser: Viewer;
+  /** DEV-ONLY `?as=` override id, forwarded to the approval server actions so
+   *  the mock write path can resolve the same viewer the page rendered with.
+   *  Drops out with the mock data — see `_mock-evaluations.ts`. */
+  viewerId?: string;
   onApplied: (change: {
     stage: ApplicationStage;
     nextAction: string;
@@ -129,6 +148,14 @@ export function ApplicationPanel({
     null,
   );
 
+  /**
+   * Set only when the user jumps to Messages from the Decision tab's
+   * post-approval prompt, so the draft form opens with the right purpose
+   * already chosen. Cleared as soon as that form closes, and on any
+   * user-initiated tab change.
+   */
+  const [draftEvent, setDraftEvent] = useState<CommunicationEvent | null>(null);
+
   const needsAttention = communications.some(
     (message) =>
       message.status === "FAILED" || message.status === "AWAITING_APPROVAL",
@@ -147,6 +174,13 @@ export function ApplicationPanel({
       round.status === "COMPLETED" &&
       ownEvaluationState(round.own) !== "SUBMITTED",
   );
+
+  const approvalRequest = detail.approval?.request ?? null;
+  const approvalSteps = approvalRequest?.steps.length;
+  const currentApprovalStep = awaitingStep(approvalRequest);
+  const awaitsViewer =
+    currentApprovalStep !== null &&
+    detail.approval?.viewerDecidableStepId === currentApprovalStep.id;
 
   const tabs: readonly SectionTab[] = [
     { id: "pipeline", label: "Pipeline" },
@@ -167,6 +201,18 @@ export function ApplicationPanel({
       attention: owesEvaluation,
     },
     {
+      id: "decision",
+      label: "Decision",
+      /* The count is the chain's steps, so "Decision 3" reads as "three people
+         have to sign this off" — and an unconfigured or unstarted chain shows
+         no count at all rather than a misleading zero. The attention dot means
+         one specific thing: the chain is blocked on *you*. Same rule as the
+         Evaluations dot — a dot that fires for other people's outstanding work
+         is a dot everyone learns to ignore. */
+      count: approvalSteps,
+      attention: awaitsViewer,
+    },
+    {
       id: "messages",
       label: "Messages",
       count: communications.length,
@@ -176,12 +222,18 @@ export function ApplicationPanel({
 
   function openSection(id: string) {
     setEvaluationFocusId(null);
+    setDraftEvent(null);
     setSection(id);
   }
 
   function openEvaluationsFor(interviewId: string) {
     setEvaluationFocusId(interviewId);
     setSection("evaluations");
+  }
+
+  function draftMessageFor(event: CommunicationEvent) {
+    setDraftEvent(event);
+    setSection("messages");
   }
 
   return (
@@ -251,6 +303,25 @@ export function ApplicationPanel({
       </SectionTabPanel>
 
       <SectionTabPanel
+        id="decision"
+        idPrefix={application.id}
+        active={section === "decision"}
+      >
+        <DecisionSection
+          application={application}
+          approval={detail.approval}
+          rounds={evaluationRounds}
+          screening={screening}
+          communications={communications}
+          viewerId={viewerId}
+          onOpenScreening={() => openSection("screening")}
+          onOpenEvaluations={openEvaluationsFor}
+          onOpenPipeline={() => openSection("pipeline")}
+          onDraftMessage={draftMessageFor}
+        />
+      </SectionTabPanel>
+
+      <SectionTabPanel
         id="messages"
         idPrefix={application.id}
         active={section === "messages"}
@@ -262,6 +333,8 @@ export function ApplicationPanel({
           templates={config.templates}
           interviews={interviews}
           currentUser={currentUser}
+          draftEvent={draftEvent}
+          onDraftEventHandled={() => setDraftEvent(null)}
           context={{
             application,
             candidate: config.candidate,

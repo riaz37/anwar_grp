@@ -44,6 +44,7 @@ export function CandidateWorkspace({
   sectionsConfig,
   people,
   currentUser,
+  viewerId,
 }: {
   applications: ApplicationSummary[];
   historyByApplication: Record<string, StageHistoryEntry[]>;
@@ -55,6 +56,9 @@ export function CandidateWorkspace({
   /** Widened from `PersonRef` in Phase 4 — the evaluation surface below is
    *  role-conditional. See `ApplicationPanel`. */
   currentUser: Viewer;
+  /** DEV-ONLY `?as=` override id — forwarded to the approval server actions.
+   *  Drops out with the mock data. See `_mock-evaluations.ts`. */
+  viewerId?: string;
 }) {
   const [applications, setApplications] = useState(initialApplications);
   const [history, setHistory] = useState(initialHistory);
@@ -230,12 +234,14 @@ export function CandidateWorkspace({
                   interviews: [],
                   evaluationRounds: [],
                   communications: [],
+                  approval: null,
                   department: "—",
                   businessUnit: "—",
                 }
               }
               config={sectionsConfig}
               currentUser={currentUser}
+              viewerId={viewerId}
               people={people}
               onApplied={(change) => handleApplied(application.id, change)}
             />

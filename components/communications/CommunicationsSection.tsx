@@ -8,6 +8,7 @@ import type { MessageContextInput } from "@/lib/communications/build-context";
 import {
   COMMUNICATION_STATUS_LABELS,
   type Communication,
+  type CommunicationEvent,
   type CommunicationStatus,
   type InterviewRound,
   type MessageTemplate,
@@ -33,6 +34,8 @@ export function CommunicationsSection({
   interviews,
   context,
   currentUser,
+  draftEvent,
+  onDraftEventHandled,
 }: {
   applicationId: string;
   communications: Communication[];
@@ -45,8 +48,18 @@ export function CommunicationsSection({
     "interview" | "documentRequestList" | "joiningDate"
   >;
   currentUser: PersonRef;
+  /**
+   * Set when the user arrived from the Decision tab's post-approval prompt
+   * (Phase 5): opens straight into the draft form with that message purpose
+   * preselected. Nothing else is carried across — see `DraftMessageForm`'s
+   * `initialEvent` for why that matters.
+   */
+  draftEvent?: CommunicationEvent | null;
+  /** Clears the request above once it has opened the form, so leaving and
+   *  returning to this tab starts from the list again. */
+  onDraftEventHandled?: () => void;
 }) {
-  const [drafting, setDrafting] = useState(false);
+  const [drafting, setDrafting] = useState(Boolean(draftEvent));
   const [announcement, setAnnouncement] = useState("");
 
   const awaitingApproval = messages.filter(
@@ -85,6 +98,11 @@ export function CommunicationsSection({
     );
   }
 
+  function closeDraft() {
+    setDrafting(false);
+    onDraftEventHandled?.();
+  }
+
   if (drafting) {
     return (
       <DraftMessageForm
@@ -93,10 +111,11 @@ export function CommunicationsSection({
         interviews={interviews}
         context={context}
         currentUser={currentUser}
-        onCancel={() => setDrafting(false)}
+        initialEvent={draftEvent ?? undefined}
+        onCancel={closeDraft}
         onDrafted={(communication) => {
           onChange([communication, ...messages]);
-          setDrafting(false);
+          closeDraft();
           setAnnouncement(
             `Message drafted. Status is ${COMMUNICATION_STATUS_LABELS[communication.status]}.`,
           );

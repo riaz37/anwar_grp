@@ -67,6 +67,22 @@ export const MOCK_HIRING_MANAGERS: readonly PersonRef[] = [
 ];
 
 /**
+ * People who hold an approval-chain role but never sit on an interview panel
+ * (Phase 5). An approval chain is a list of *roles*
+ * (BUILD_PLAN.md Sec 2.9), and two of those roles — HR leadership and the TA
+ * administrator — belong to nobody in the lists above, so a chain naming them
+ * would have resolved to no one.
+ *
+ * SWAP POINT — GET /api/v1/users?role=HR_LEADERSHIP,TA_ADMIN. With the real
+ * API the chain's approvers are resolved server-side from the role, and this
+ * list disappears with the rest of the mock reference data.
+ */
+export const MOCK_APPROVERS: readonly PersonRef[] = [
+  { id: "usr_hrl_1", name: "Rowshan Ara" },
+  { id: "usr_ta_admin_1", name: "Iftekhar Alam" },
+];
+
+/**
  * People who can sit on an interview panel (spec Sec 6 > Interview Scheduling,
  * "Interview-panel assignment"; spec Sec 3 lists "Interview panel members" as
  * a primary user in their own right).
@@ -170,6 +186,8 @@ export const MOCK_SYSTEM_ROLES: Record<string, UserRole> = {
   usr_recruiter_2: "RECRUITER",
   usr_recruiter_3: "RECRUITER",
   usr_recruiter_4: "RECRUITER",
+  usr_hrl_1: "HR_LEADERSHIP",
+  usr_ta_admin_1: "TA_ADMIN",
 };
 
 export function systemRoleOf(userId: string): UserRole {
@@ -221,6 +239,7 @@ export function personById(id: string): PersonRef {
   const match =
     MOCK_RECRUITERS.find((person) => person.id === id) ??
     MOCK_HIRING_MANAGERS.find((person) => person.id === id) ??
-    MOCK_PANEL_MEMBERS.find((person) => person.id === id);
+    MOCK_PANEL_MEMBERS.find((person) => person.id === id) ??
+    MOCK_APPROVERS.find((person) => person.id === id);
   return match ? { id: match.id, name: match.name } : { id, name: "—" };
 }

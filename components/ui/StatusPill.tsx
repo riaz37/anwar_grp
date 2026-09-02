@@ -1,4 +1,10 @@
 import {
+  APPROVAL_REQUEST_STATUS_LABELS,
+  APPROVAL_STEP_STATE_LABELS,
+  type ApprovalRequestStatus,
+  type ApprovalStepState,
+} from "@/lib/types/approvals";
+import {
   COMMUNICATION_STATUS_LABELS,
   INTERVIEW_STATUS_LABELS,
   REQUISITION_STATUS_LABELS,
@@ -9,6 +15,8 @@ import {
   type RequisitionStatus,
 } from "@/lib/types/domain";
 import {
+  APPROVAL_REQUEST_STATUS_TONE,
+  APPROVAL_STEP_STATE_TONE,
   COMMUNICATION_STATUS_TONE,
   INTERVIEW_STATUS_TONE,
   REQUISITION_STATUS_TONE,
@@ -105,6 +113,50 @@ export function InterviewStatusPill({
  * rather than `sm`: a message's status is the primary thing a recruiter reads
  * off the communications list, not a row annotation.
  */
+/**
+ * Where an approval request as a whole stands (spec Sec 6 > Decisions and
+ * Approvals). Defaults to `md` for the same reason the communication pill
+ * does — on the Decision tab this is the headline fact, not an annotation.
+ */
+export function ApprovalStatusPill({
+  status,
+  size = "md",
+}: {
+  status: ApprovalRequestStatus;
+  size?: keyof typeof SIZES;
+}) {
+  return (
+    <Pill
+      tone={APPROVAL_REQUEST_STATUS_TONE[status]}
+      label={APPROVAL_REQUEST_STATUS_LABELS[status]}
+      size={size}
+    />
+  );
+}
+
+/**
+ * One step of a chain. `HALTED` is struck through as well as labelled "Never
+ * asked": a rejected chain's later steps did not happen and are not going to,
+ * and the strike is the same device `WITHDRAWN`/`CLOSED` stages already use for
+ * "this never completed".
+ */
+export function ApprovalStepPill({
+  state,
+  size,
+}: {
+  state: ApprovalStepState;
+  size?: keyof typeof SIZES;
+}) {
+  return (
+    <Pill
+      tone={APPROVAL_STEP_STATE_TONE[state]}
+      label={APPROVAL_STEP_STATE_LABELS[state]}
+      size={size}
+      struck={state === "HALTED"}
+    />
+  );
+}
+
 export function CommunicationStatusPill({
   status,
   size = "md",

@@ -17,6 +17,10 @@
  */
 
 import type {
+  ApprovalRequestStatus,
+  ApprovalStepState,
+} from "@/lib/types/approvals";
+import type {
   ApplicationStage,
   CommunicationStatus,
   EligibilityOutcome,
@@ -267,6 +271,51 @@ export function panelFeedbackTone(
   if (totalPanelists === 0) return "neutral";
   return submittedCount >= totalPanelists ? "success" : "warning";
 }
+
+/**
+ * Approval-request status → tone (spec Sec 6 > Decisions and Approvals;
+ * BUILD_PLAN.md Sec 2.9).
+ *
+ * IN_PROGRESS warning — a named approver is being waited on and the candidate
+ *                       is waiting behind them. Exactly DESIGN.md's warning
+ *                       definition, and the same reading `APPROVAL` already has
+ *                       in `STAGE_TONE` above.
+ * APPROVED    success  — a good ending, and the one that unblocks the offer.
+ * REJECTED    error    — a negative ending, matching `REJECTED` in STAGE_TONE.
+ *
+ * Note what has no tone: the chain as a whole is never coloured by how many
+ * approvals it has collected, and no aggregate of the panel's scores is
+ * coloured anywhere on the Decision tab. Colour here describes a human's
+ * recorded decision, never the system's opinion of one.
+ */
+export const APPROVAL_REQUEST_STATUS_TONE: Record<ApprovalRequestStatus, Tone> =
+  {
+    IN_PROGRESS: "warning",
+    APPROVED: "success",
+    REJECTED: "error",
+  };
+
+/**
+ * Approval-step state → tone.
+ *
+ * APPROVED    success — this person said yes, on the record.
+ * REJECTED    error   — this person said no, and the chain ended here.
+ * AWAITING    warning — the chain is blocked on this role right now.
+ * NOT_REACHED neutral — genuinely still to come; carries no obligation yet.
+ * HALTED      neutral — never asked, and never will be. Deliberately the same
+ *                       inert tone as NOT_REACHED rather than an alarming one:
+ *                       the *step* did not fail, the chain simply ended before
+ *                       it. The row's own label ("Never asked") carries that
+ *                       distinction in words, where it cannot be misread as a
+ *                       second rejection.
+ */
+export const APPROVAL_STEP_STATE_TONE: Record<ApprovalStepState, Tone> = {
+  APPROVED: "success",
+  REJECTED: "error",
+  AWAITING: "warning",
+  NOT_REACHED: "neutral",
+  HALTED: "neutral",
+};
 
 /**
  * Stages rendered struck through: the application ended without a decision

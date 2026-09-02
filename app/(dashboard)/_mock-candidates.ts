@@ -390,6 +390,36 @@ const SEEDS: readonly CandidateSeed[] = [
           { stage: "JOINING", daysAgo: 4, by: "usr_recruiter_1" },
         ],
       },
+      {
+        /* Phase 5 fixture: the one application in the set that was rejected *at
+           the approval step* rather than at screening. Without it, the rejected
+           approval chain — a single "no" ending the chain, with every later
+           step marked never-asked — has nowhere to render. */
+        id: "app_8781",
+        requisitionId: "req_121",
+        stage: "REJECTED",
+        recruiterId: "usr_recruiter_1",
+        nextAction: "None — approval rejected, candidate informed",
+        ownerId: "usr_recruiter_1",
+        dueInDays: -8,
+        stageChangedDaysAgo: 8,
+        appliedDaysAgo: 64,
+        version: 17,
+        history: [
+          { stage: "NEW", daysAgo: 64, by: "usr_recruiter_1" },
+          { stage: "SCREENING", daysAgo: 60, by: "usr_recruiter_1" },
+          { stage: "ASSESSMENT", daysAgo: 51, by: "usr_recruiter_1" },
+          { stage: "INTERVIEW", daysAgo: 38, by: "usr_recruiter_1" },
+          { stage: "FEEDBACK_PENDING", daysAgo: 30, by: "usr_recruiter_1" },
+          { stage: "APPROVAL", daysAgo: 21, by: "usr_recruiter_1" },
+          {
+            stage: "REJECTED",
+            daysAgo: 8,
+            by: "usr_recruiter_1",
+            note: "Approval chain rejected at the HR leadership step.",
+          },
+        ],
+      },
     ],
   },
   {
