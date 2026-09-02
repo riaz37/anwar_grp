@@ -8,6 +8,10 @@ const SEED_DEPARTMENT = "Talent Acquisition";
 const SEED_ADMIN_EMAIL = "ta.admin@anwargroup.test";
 const SEED_ADMIN_PASSWORD = "TalentFlow!2026";
 const SEED_ADMIN_NAME = "TA Admin";
+const SEED_RECRUITER_EMAIL = "recruiter@anwargroup.test";
+const SEED_RECRUITER_NAME = "Test Recruiter";
+const SEED_HIRING_MANAGER_EMAIL = "hiring.manager@anwargroup.test";
+const SEED_HIRING_MANAGER_NAME = "Test Hiring Manager";
 
 async function main() {
   const businessUnit = await prisma.businessUnit.upsert({
@@ -51,14 +55,61 @@ async function main() {
     },
   });
 
+  // Phase 2 (Requisition -> Candidate) needs at least one RECRUITER and
+  // one DEPT_HEAD/HIRING_MANAGER to exercise role-scoped list endpoints
+  // and requisition approval end-to-end — extending the existing seed
+  // rather than adding a separate seed file per the task instructions.
+  const recruiter = await prisma.user.upsert({
+    where: { email: SEED_RECRUITER_EMAIL },
+    update: {
+      passwordHash,
+      role: Role.RECRUITER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+      isActive: true,
+    },
+    create: {
+      email: SEED_RECRUITER_EMAIL,
+      passwordHash,
+      name: SEED_RECRUITER_NAME,
+      role: Role.RECRUITER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+    },
+  });
+
+  const hiringManager = await prisma.user.upsert({
+    where: { email: SEED_HIRING_MANAGER_EMAIL },
+    update: {
+      passwordHash,
+      role: Role.HIRING_MANAGER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+      isActive: true,
+    },
+    create: {
+      email: SEED_HIRING_MANAGER_EMAIL,
+      passwordHash,
+      name: SEED_HIRING_MANAGER_NAME,
+      role: Role.HIRING_MANAGER,
+      businessUnitId: businessUnit.id,
+      departmentId: department.id,
+    },
+  });
+
   console.log("Seed complete.");
   console.log("BusinessUnit:", businessUnit.name, businessUnit.id);
   console.log("Department:", department.name, department.id);
   console.log("TA_ADMIN user:", admin.email, admin.id);
+  console.log("RECRUITER user:", recruiter.email, recruiter.id);
+  console.log("HIRING_MANAGER user:", hiringManager.email, hiringManager.id);
   console.log("---");
   console.log("Seed admin login credentials (local dev only):");
   console.log("  email:   ", SEED_ADMIN_EMAIL);
   console.log("  password:", SEED_ADMIN_PASSWORD);
+  console.log("  (recruiter/hiring-manager seed accounts share this password)");
+  console.log("  recruiter:      ", SEED_RECRUITER_EMAIL);
+  console.log("  hiring manager: ", SEED_HIRING_MANAGER_EMAIL);
   console.log("---");
 }
 

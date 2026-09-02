@@ -32,6 +32,7 @@ model BusinessUnit {
   updatedAt   DateTime     @updatedAt
   departments Department[]
   users       User[]
+  requisitions Requisition[]
 
   @@map("business_units")
 }
@@ -44,6 +45,7 @@ model Department {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   users          User[]
+  requisitions   Requisition[]
 
   @@unique([businessUnitId, name])
   @@map("departments")
@@ -67,6 +69,13 @@ model User {
   auditLogs             AuditLog[]
   confidentialGrants    ConfidentialDataGrant[] @relation("GrantRecipient")
   grantsIssued          ConfidentialDataGrant[] @relation("GrantIssuer")
+
+  // Phase 2 (Requisition -> Candidate) relations.
+  requisitionsAsHiringManager  Requisition[] @relation("RequisitionHiringManager")
+  requisitionsAsRecruiter     Requisition[] @relation("RequisitionRecruiter")
+  applicationsAsRecruiter     Application[] @relation("ApplicationRecruiter")
+  applicationsAsNextActionOwner Application[] @relation("ApplicationNextActionOwner")
+  stageHistoryChanges         StageHistory[] @relation("StageHistoryChangedBy")
 
   @@map("users")
 }
@@ -144,4 +153,147 @@ model Document {
 
   @@index([ownerType, ownerId])
   @@map("documents")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 (Requisition -> Candidate): BUILD_PLAN.md Sec 3.1 item 2.
+// Screening/Interview/Evaluation/Approval-chain/Communication/Joining are
+// later phases — deliberately not modeled here (BUILD_PLAN.md Sec 2.3).
+// ---------------------------------------------------------------------------
+
+enum RequisitionApprovalStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  APPROVED
+  OPEN
+  ON_HOLD
+  FILLED
+  CLOSED
+}
+
+enum CandidateSource {
+  MANUAL_ENTRY
+  CV_UPLOAD
+  SPREADSHEET_IMPORT
+  JOB_PORTAL
+  REFERRAL
+  INTERNAL_POOL
+  RECRUITMENT_EVENT
+  HEADHUNTER
+}
+
+// PDF Sec 5 pipeline: New -> Screening -> Assessment -> Interview ->
+// Feedback Pending -> Approval -> Selected -> Joining -> Joined, plus
+// alternative outcomes On Hold / Rejected / Withdrawn / Redirected / Closed.
+enum ApplicationStage {
+  NEW
+  SCREENING
+  ASSESSMENT
+  INTERVIEW
+  FEEDBACK_PENDING
+  APPROVAL
+  SELECTED
+  JOINING
+  JOINED
+  ON_HOLD
+  REJECTED
+  WITHDRAWN
+  REDIRECTED
+  CLOSED
+}
+
+model Requisition {
+  id                  String                    @id @default(cuid())
+  businessUnitId      String
+  businessUnit        BusinessUnit              @relation(fields: [businessUnitId], references: [id])
+  departmentId        String
+  department          Department                @relation(fields: [departmentId], references: [id])
+  position             String
+  vacancyCount         Int
+  positionLevel        String
+  hiringManagerId      String
+  hiringManager        User                      @relation("RequisitionHiringManager", fields: [hiringManagerId], references: [id])
+  assignedRecruiterId  String
+  assignedRecruiter    User                      @relation("RequisitionRecruiter", fields: [assignedRecruiterId], references: [id])
+  targetJoiningDate    DateTime
+  approvalStatus       RequisitionApprovalStatus @default(DRAFT)
+  erfRrfDocumentId     String?                   @unique
+  notes                String?
+  version              Int                       @default(1)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  applications Application[]
+
+  @@index([assignedRecruiterId])
+  @@index([businessUnitId, departmentId])
+  @@index([approvalStatus])
+  @@map("requisitions")
+}
+
+// Deliberately separate from Application — one candidate, many
+// applications (PDF Sec 6: "system should separate the candidate profile
+// from the job application, as one candidate may apply for multiple
+// positions").
+model Candidate {
+  id              String          @id @default(cuid())
+  name            String
+  mobileNumber    String
+  email           String
+  candidateSource CandidateSource
+  cvDocumentId    String?         @unique
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  applications Application[]
+
+  @@index([email])
+  @@index([mobileNumber])
+  @@map("candidates")
+}
+
+model Application {
+  id                   String            @id @default(cuid())
+  candidateId          String
+  candidate            Candidate         @relation(fields: [candidateId], references: [id])
+  requisitionId        String
+  requisition          Requisition       @relation(fields: [requisitionId], references: [id])
+  assignedRecruiterId  String
+  assignedRecruiter    User              @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
+  currentStage         ApplicationStage  @default(NEW)
+  nextAction           String?
+  nextActionOwnerId    String?
+  nextActionOwner      User?             @relation("ApplicationNextActionOwner", fields: [nextActionOwnerId], references: [id])
+  nextActionDueDate    DateTime?
+  version              Int               @default(1)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  stageHistory StageHistory[]
+
+  @@index([assignedRecruiterId])
+  @@index([currentStage])
+  @@index([requisitionId])
+  @@index([candidateId])
+  @@index([nextActionOwnerId, nextActionDueDate])
+  @@map("applications")
+}
+
+// Append-only. No update path is exposed in the API for this model, ever —
+// per BUILD_PLAN.md Sec 2.3 ("Every stage change must create a permanent
+// history record" from PDF Sec 5).
+model StageHistory {
+  id            String            @id @default(cuid())
+  applicationId String
+  application   Application       @relation(fields: [applicationId], references: [id])
+  fromStage     ApplicationStage?
+  toStage       ApplicationStage
+  changedById   String
+  changedBy     User              @relation("StageHistoryChangedBy", fields: [changedById], references: [id])
+  changedAt     DateTime          @default(now())
+  notes         String?
+
+  @@index([applicationId])
+  @@map("stage_history")
 }

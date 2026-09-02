@@ -527,3 +527,38 @@ verified end-to-end (typecheck, `npm run build`, live login → session
   unaffected (9000/9001).
 
 Next: Phase 2 (Requisition → Candidate, Sec 3.1 item 2).
+
+---
+
+## Phase 2 status: backend + frontend complete, wiring pending (2026-09-02)
+
+Built the same way as Phase 1: a parallel backend + frontend agent
+pair. Backend added `Requisition`, `Candidate`, `Application`,
+`StageHistory` models + full CRUD/transition APIs, exact-match
+duplicate-candidate detection (`lib/candidate-dedup.ts`), the pipeline
+transition graph (`lib/application-stages.ts`), and the live
+recruiter-dashboard query (`lib/reporting/recruiter-dashboard.ts`) —
+independently verified via curl smoke tests (create → approve →
+duplicate-warning → stage transition → 409 conflict → my-tasks
+report). Frontend built the Requisitions list/detail/create,
+Candidates list + Candidate Workspace (shared profile + per-application
+tab strip per Sec 5 decision #6), the stage pipeline visualization, the
+inline duplicate-warning banner, and the inline optimistic-locking
+conflict banner (Sec 5 decision #4) — against typed mock data with
+documented swap points, same convention as Phase 1's `_mock-tasks.ts`.
+
+Closed the two gaps the agents flagged as hard blockers directly:
+`GET /api/v1/candidates/dedup-check`, `POST /api/v1/documents` (the
+missing write after presign+PUT), and reference-lookup routes
+(`/api/v1/business-units`, `/api/v1/departments`, `/api/v1/users`).
+Added `Requisition.notes` and `CandidateSource.RECRUITMENT_EVENT` to
+the schema per the frontend's reconciliation notes.
+
+**Remaining before this phase is fully "done":** rewiring the
+frontend's mock-data swap points to the now-complete API — tracked as
+its own item in `TODOS.md` ("Phase 2 frontend: wire mock data to the
+real API") rather than done ad hoc, because the two agents' contract
+shapes have real differences (ref codes, positionLevel enum vs string,
+field naming) worth reconciling deliberately.
+
+Next: Phase 3 (Screening + Interview Scheduling, Sec 3.1 item 3).
