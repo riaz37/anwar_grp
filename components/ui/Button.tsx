@@ -13,9 +13,7 @@ const BASE =
   "transition-colors duration-100 ease-move disabled:cursor-not-allowed disabled:opacity-60";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    "bg-accent-ink font-semibold text-surface hover:bg-accent-hover " +
-    "disabled:cursor-progress",
+  primary: "bg-accent-ink font-semibold text-surface hover:bg-accent-hover",
   secondary:
     "border border-border-strong bg-surface text-text hover:bg-surface-sunken",
   ghost: "text-accent-ink hover:bg-accent-soft",
