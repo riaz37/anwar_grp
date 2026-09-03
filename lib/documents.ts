@@ -122,59 +122,53 @@ export async function presignUpload(
 }
 
 /**
- * Pluggable authorization hook for document downloads.
+ * Document download authorization.
  *
  * BUILD_PLAN.md Sec 2.6: "download checks the requester's
  * authorization for the owning entity before issuing a presigned GET —
  * document access inherits the same break-glass/RBAC rules as the
  * record it belongs to."
  *
- * Phase 1 only has auth/org models — there is no Requisition/
- * Candidate/Application/etc. to check ownership against yet. Each
- * later module that owns a DocumentOwnerType (CANDIDATE, APPLICATION,
- * REQUISITION, SCREENING_ASSESSMENT, EVALUATION,
- * JOINING_CHECKLIST_ITEM) MUST register a checker here before its
- * documents can be safely downloaded. Until a checker is registered
- * for a given ownerType, downloads for that type are denied by
- * default (fail closed, not fail open).
- *
- * A checker receives the requesting user's session and the Document's
- * owner (type + id) and returns true if that user may download it.
- * It should itself account for break-glass/ConfidentialDataGrant logic
- * once that lands (Sec 2.5) — this hook is just the seam later modules
- * plug into.
+ * `DocumentOwnerType` has exactly one member (`PROJECT`) in this
+ * domain, so the rule is inlined directly rather than routed through a
+ * runtime-registered checker map. (An earlier version of this file
+ * used a pluggable `Map` populated by `instrumentation.ts`'s boot
+ * hook — for a prior multi-owner-type domain that pattern made sense,
+ * but under Next's dev-mode module isolation the `instrumentation.ts`
+ * module instance and the route handler's module instance of this
+ * file are NOT guaranteed to be the same object, so the map populated
+ * at boot was never the map read from a request — every download was
+ * silently denied. Found by /qa 2026-09-03, fixed by removing the
+ * indirection instead of chasing module-identity timing.)
  */
-export type DocumentDownloadAuthzChecker = (params: {
-  user: SessionPayload;
-  ownerType: DocumentOwnerType;
-  ownerId: string;
-}) => Promise<boolean> | boolean;
-
-const downloadAuthzCheckers = new Map<
-  DocumentOwnerType,
-  DocumentDownloadAuthzChecker
->();
-
-/** Called by a later module's init code to register its authz rule. */
-export function registerDocumentDownloadAuthzChecker(
-  ownerType: DocumentOwnerType,
-  checker: DocumentDownloadAuthzChecker,
-): void {
-  downloadAuthzCheckers.set(ownerType, checker);
-}
-
 export async function isAuthorizedToDownload(params: {
   user: SessionPayload;
   ownerType: DocumentOwnerType;
   ownerId: string;
 }): Promise<boolean> {
-  const checker = downloadAuthzCheckers.get(params.ownerType);
-  if (!checker) {
-    // Fail closed: no owning module has registered a rule yet for
-    // this ownerType, so nobody (not even TA_ADMIN) can download.
+  if (params.ownerType !== "PROJECT") {
+    // Fail closed: no rule exists for any other owner type.
     return false;
   }
-  return checker(params);
+
+  const { prisma } = await import("./prisma");
+  const { isProjectParticipant } = await import("./project-authz");
+
+  if (params.user.role === "AI_TEAM_LEAD" || params.user.role === "MANAGEMENT") {
+    return true;
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: params.ownerId },
+    select: {
+      ownerId: true,
+      analystId: true,
+      developerId: true,
+      departmentId: true,
+    },
+  });
+  if (!project) return false;
+  return isProjectParticipant(params.user, project);
 }
 
 export interface PresignDownloadResult {
