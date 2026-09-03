@@ -23,8 +23,12 @@ full review findings are in `.claude/plans/misty-inventing-cake.md`.
 - **Framework:** Next.js (App Router) — API routes serve as the versioned
   `/api/v1` REST API; server/client components serve as the SPA.
 - **Database:** PostgreSQL via Prisma ORM (schema + migrations).
-- **Background jobs:** BullMQ + Redis — reused for milestone/blocker
-  escalation reminders (`lib/queue.ts`, `lib/reminder-scheduler.ts`).
+- **Background jobs:** none. The original plan carried over a
+  TalentFlow-era line claiming BullMQ + Redis were "reused" for
+  milestone/blocker reminders (`lib/queue.ts`, `lib/reminder-scheduler.ts`)
+  — those files never existed in this rebuild; the claim was stale
+  documentation, not a real dependency. See "Notification approach"
+  below for the actual (deliberately non-push) design.
 - **Auth:** Credentials-based (email + password, bcrypt-hashed) session
   layer — session carries `role`, `departmentId`, `businessUnitId`.
   Reused unchanged (`lib/session.ts`, `app/(auth)/*`).
@@ -61,6 +65,51 @@ act, and when it will be delivered?"*
 ### Design principles (assignment Sec 10, locked)
 One Project Owner · One Current Stage · One Next Milestone · One Next
 Action · One Expected Delivery Date.
+
+### How this system structures AI projects (assignment Sec 12A)
+As one `Project` row per initiative, carried through a fixed 10-stage
+pipeline (`ProjectStage`, Sec 3), never a free-text status field. Every
+project has exactly one accountable owner, one current stage the whole
+org agrees on, and — while in flight — one next milestone and one next
+action, per the design principles above. Stage isn't something a PM
+"sets"; it only changes through `transitionProjectStage`
+(`lib/project-stages.ts`), which is forward-only, one step at a time,
+and blocked until the current stage's `StageGateChecklistItem`s are all
+checked. That's the structural answer to "how would you structure AI
+projects": make the *stage itself* the thing that's evidence-gated,
+not a status label a human types over Slack.
+
+### How this system measures real progress (assignment Sec 12A)
+Two complementary numbers, both computed server-side, never hand-entered:
+1. **Gate readiness** — `computeChecklistReadiness()` (`lib/checklist-
+   engine.ts`) reports `checked/total` for the current stage's exit
+   criteria (the exact Sec 5 checklist items). "Development is almost
+   finished" becomes "2 of 3 Development exit criteria checked" —
+   a verifiable claim, not a vibe.
+2. **Milestone completion** — each `Milestone` is PENDING/IN_PROGRESS/
+   DONE with an owner and a due date; the Milestones & Tasks tab and
+   the Management Dashboard both surface this directly, so "how much of
+   the plan is actually done" is a count of DONE milestones against the
+   plan, not a re-ask of the project owner.
+Neither number can be inflated by changing a status field without also
+producing the underlying evidence (a checked box, a completed
+milestone) — that's the whole point of Sec 5's "progress must be
+evidence-based" requirement.
+
+### How this system identifies delays (assignment Sec 12A)
+`computeProjectHealth()` (`lib/project-health.ts`) derives health from
+data, not from anyone declaring it: an unresolved `Blocker` forces
+`BLOCKED` (dominates everything else — a blocker means nobody can
+unilaterally fix it); otherwise an overdue non-DONE milestone forces
+`DELAYED`; otherwise a milestone due within 3 days forces `AT_RISK`;
+otherwise `ON_TRACK`. The moment a milestone goes overdue, the system
+also requires a `DelayReason` (`milestoneRequiresDelayReason`) from the
+assignment's fixed Sec 8 taxonomy before that milestone can be edited
+further — so "why is it late" is captured at the moment lateness is
+discovered, not reconstructed later from memory. `ScopeChange` records
+are kept separately from delay reasons specifically so management can
+tell "we're late because scope grew" apart from "we're late because
+execution slipped" (assignment Sec 8's explicit ask).
 
 ---
 
@@ -136,6 +185,35 @@ matching `app/(dashboard)/*` and `app/api/v1/*` routes.
    foundation. Priority: stage-gate transition logic, health computation,
    delay-reason enforcement, RBAC checks, then integration tests for the
    core API sequence. Full UI coverage is a known, flagged gap.
+
+7. **Notification approach (assignment Sec 12C)** — deliberately
+   **pull, not push**, for this version. Nothing emails/Slacks/texts
+   anyone. Instead:
+   - **Home** (`/`) is a role-scoped landing page: everyone sees their
+     own open tasks/milestones count on login; AI_TEAM_LEAD/MANAGEMENT
+     additionally see a condensed "needs attention" summary.
+   - **My Work** (`/my-work`) is the personal queue — every project,
+     task, and milestone assigned to *you*, with overdue/at-risk flagged.
+   - **Management Dashboard** (`/dashboard`) puts "needs attention"
+     (blocked/delayed projects, and *why*) at the top, above the
+     aggregate counts — directly answering the assignment's "which
+     projects require my attention today, and why" test (Sec 7).
+   - Every state change that matters is durable and queryable:
+     `ProjectStageHistory`, `DelayReason`, and `Blocker` rows are never
+     deleted, so "what changed and when" is always answerable by
+     opening the project, not by searching an inbox for a notification
+     that may have been missed.
+   Why not push notifications: the assignment explicitly warns against
+   building "another generic task-management system," and email/Slack/
+   push infrastructure is exactly the kind of generic plumbing that
+   doesn't differentiate a *governance* tool from a *task* tool — it
+   also has real failure modes (missed emails, notification fatigue)
+   that a "management opens one page and sees the truth" design
+   sidesteps entirely. If usage data ever showed people weren't opening
+   the dashboard often enough for staleness to matter, the natural next
+   step is a scheduled digest (daily/weekly summary email) rather than
+   granular per-event pushes — worth a line in `TODOS.md` if it comes
+   up, not built speculatively now.
 
 ---
 
