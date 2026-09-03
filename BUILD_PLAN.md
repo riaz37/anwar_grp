@@ -342,6 +342,31 @@ before writing `ProjectStageHistory` and advancing `currentStage`.
         component tests remain the same known, flagged gap as TODOS.md
         already states for the prior domain.
 
+## 8. QA (2026-09-03, post-build)
+
+Full end-to-end QA run as 4 parallel agents against a live dev server +
+seeded DB — see `qa/SUMMARY.md` and the 4 `qa/checklist-*.md` files for
+full detail. **99/99 checklist items pass** after fixes. Two issues found:
+
+1. **Critical, fixed** — document downloads were unconditionally denied
+   (403) for every role, including AI_TEAM_LEAD/MANAGEMENT. Root cause:
+   a boot-time authz-checker registry in `lib/documents.ts`/
+   `instrumentation.ts` whose module instance wasn't guaranteed to match
+   the route handler's under Next 16 + Turbopack dev. Fixed by removing
+   the registry indirection (this domain has one `DocumentOwnerType`, so
+   the pluggable-registry pattern — built for the deleted multi-owner-
+   type recruitment domain — no longer earned its complexity) and
+   inlining the check directly. Commit `345a2b7`.
+2. **Cosmetic, fixed** — leftover "TalentFlow" branding (title, header
+   wordmark, login copy, two doc comments) from the app's prior
+   recruitment-ATS incarnation. Commit `f68249a`.
+
+The core, highest-risk logic — gated stage transitions, checklist
+enforcement, health computation's full priority ladder, delay-reason
+enforcement, optimistic locking, and the full RBAC matrix — passed
+exhaustive live testing with zero issues, corroborating the Vitest
+integration suite.
+
 See `.claude/plans/misty-inventing-cake.md` for the full `/plan-eng-review`
 transcript (architecture decisions with tradeoffs, what-already-exists,
 NOT-in-scope, review report).
