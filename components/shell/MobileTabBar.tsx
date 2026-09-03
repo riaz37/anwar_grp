@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { isActiveHref, PRIMARY_NAV_ITEMS } from "./nav-items";
 
 /**
- * Mobile bottom bar — Home / My Tasks / Candidates only. The remaining six
- * sections live in the slide-out drawer (BUILD_PLAN.md Sec 5, decision 5).
+ * Mobile bottom bar — Home / My Work / Portfolio only. Management Dashboard
+ * lives in the slide-out drawer (BUILD_PLAN.md Sec 5, decision 5).
  */
 export function MobileTabBar() {
   const pathname = usePathname();
