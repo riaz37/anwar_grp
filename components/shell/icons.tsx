@@ -44,49 +44,11 @@ export function TasksIcon(props: IconProps) {
   );
 }
 
-export function RequisitionsIcon(props: IconProps) {
+export function ProjectsIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M6 3h8l4 4v14H6z" />
       <path d="M14 3v4h4M9 12h6M9 16h4" />
-    </Icon>
-  );
-}
-
-export function CandidatesIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <circle cx="9.5" cy="8.5" r="3" />
-      <path d="M4 19c0-2.8 2.5-4.5 5.5-4.5S15 16.2 15 19" />
-      <path d="M16 6.2a3 3 0 0 1 0 5.6M18 19c0-2.2-.8-3.6-2-4.4" />
-    </Icon>
-  );
-}
-
-export function InterviewsIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <rect x="4" y="5.5" width="16" height="14.5" rx="1.5" />
-      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
-      <path d="m9.5 14.5 1.8 1.8 3.4-3.4" />
-    </Icon>
-  );
-}
-
-export function MessagesIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M20 14.5a1.5 1.5 0 0 1-1.5 1.5H9l-4 3.5V6a1.5 1.5 0 0 1 1.5-1.5h12A1.5 1.5 0 0 1 20 6z" />
-      <path d="M9 8.5h7M9 12h4.5" />
-    </Icon>
-  );
-}
-
-export function JoiningIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M14 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H14" />
-      <path d="M11 12h8m0 0-3-3m3 3-3 3" />
     </Icon>
   );
 }

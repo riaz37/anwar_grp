@@ -8,44 +8,40 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1 (Foundations): org structure, auth/RBAC, audit log, documents,
-// break-glass confidential-data grants. Recruitment-domain models
-// (Requisition/Candidate/Application/etc.) land in later phases per
-// BUILD_PLAN.md Sec 3.1 — do not add them here yet.
+// Foundations: org structure, auth/RBAC, audit log, documents, break-glass
+// confidential-data grants. Reused unchanged from the prior TalentFlow build
+// (BUILD_PLAN.md Sec 2). Project domain models are below.
 // ---------------------------------------------------------------------------
 
 enum Role {
-  TA_ADMIN
-  RECRUITER
-  DEPT_HEAD
-  HIRING_MANAGER
-  PANEL_MEMBER
-  HR_LEADERSHIP
-  AUDIT_USER
-  TECH_ADMIN
+  AI_ANALYST
+  DEVELOPER
+  BUSINESS_OWNER
+  AI_TEAM_LEAD
+  MANAGEMENT
 }
 
 model BusinessUnit {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  departments  Department[]
-  users        User[]
-  requisitions Requisition[]
+  id          String       @id @default(cuid())
+  name        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  departments Department[]
+  users       User[]
+  projects    Project[]
 
   @@map("business_units")
 }
 
 model Department {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
   businessUnitId String
-  businessUnit   BusinessUnit  @relation(fields: [businessUnitId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   users          User[]
-  requisitions   Requisition[]
+  projects       Project[]
 
   @@unique([businessUnitId, name])
   @@map("departments")
@@ -70,34 +66,18 @@ model User {
   confidentialGrants ConfidentialDataGrant[] @relation("GrantRecipient")
   grantsIssued       ConfidentialDataGrant[] @relation("GrantIssuer")
 
-  // Phase 2 (Requisition -> Candidate) relations.
-  requisitionsAsHiringManager   Requisition[]  @relation("RequisitionHiringManager")
-  requisitionsAsRecruiter       Requisition[]  @relation("RequisitionRecruiter")
-  applicationsAsRecruiter       Application[]  @relation("ApplicationRecruiter")
-  applicationsAsNextActionOwner Application[]  @relation("ApplicationNextActionOwner")
-  stageHistoryChanges           StageHistory[] @relation("StageHistoryChangedBy")
-
-  // Phase 3 (Screening + Interview Scheduling + Communication) relations.
-  screeningAssessmentsCreated ScreeningAssessment[]        @relation("ScreeningCreatedBy")
-  interviewsCreated           Interview[]                  @relation("InterviewCreatedBy")
-  interviewPanelistOf         InterviewPanelist[]
-  interviewReschedulesChanged InterviewRescheduleHistory[] @relation("InterviewRescheduleChangedBy")
-  messageTemplatesCreated     MessageTemplate[]            @relation("MessageTemplateCreatedBy")
-  communicationsDrafted       Communication[]              @relation("CommunicationDraftedBy")
-  communicationsApproved      Communication[]              @relation("CommunicationApprovedBy")
-
-  // Phase 4 (Interview Evaluation + Feedback) relations.
-  evaluationFormTemplatesCreated EvaluationFormTemplate[] @relation("EvaluationFormTemplateCreatedBy")
-  evaluationsAsPanelist          Evaluation[]             @relation("EvaluationPanelist")
-
-  // Phase 5 (Approval + Decision) relations.
-  approvalChainConfigsCreated ApprovalChainConfig[] @relation("ApprovalChainConfigCreatedBy")
-  approvalRequestsInitiated   ApprovalRequest[]     @relation("ApprovalRequestInitiatedBy")
-  approvalDecisionsMade       ApprovalDecision[]    @relation("ApprovalDecisionDecidedBy")
-
-  // Phase 6 (Joining Coordination) relations.
-  joiningChecklistItemsOwned   JoiningChecklistItem[] @relation("JoiningChecklistItemOwner")
-  joiningChecklistItemsCreated JoiningChecklistItem[] @relation("JoiningChecklistItemCreatedBy")
+  // Project domain relations.
+  projectsAsOwner       Project[]                @relation("ProjectOwner")
+  projectsAsAnalyst     Project[]                @relation("ProjectAnalyst")
+  projectsAsDeveloper   Project[]                @relation("ProjectDeveloper")
+  stageHistoryActions   ProjectStageHistory[]    @relation("StageHistoryActor")
+  checklistItemsChecked StageGateChecklistItem[] @relation("ChecklistCheckedBy")
+  milestonesOwned       Milestone[]              @relation("MilestoneOwner")
+  tasksOwned            ProjectTask[]            @relation("TaskOwner")
+  blockersRaised        Blocker[]                @relation("BlockerRaisedBy")
+  blockersResolved      Blocker[]                @relation("BlockerResolvedBy")
+  scopeChangesRequested ScopeChange[]            @relation("ScopeChangeRequestedBy")
+  delayReasonsRecorded  DelayReason[]            @relation("DelayReasonRecordedBy")
 
   @@map("users")
 }
@@ -113,9 +93,9 @@ model Session {
   @@map("sessions")
 }
 
-// Break-glass elevation grant: confidential fields (CV contents, scores,
-// personal contact info) are hidden by default even from Technical
-// Administrators. Every grant + access under it is written to AuditLog.
+// Break-glass elevation grant: confidential fields are hidden by default
+// even from elevated roles. Every grant + access under it is written to
+// AuditLog.
 model ConfidentialDataGrant {
   id          String    @id @default(cuid())
   userId      String
@@ -123,7 +103,7 @@ model ConfidentialDataGrant {
   grantedById String
   grantedBy   User      @relation("GrantIssuer", fields: [grantedById], references: [id])
   reason      String
-  scope       String // e.g. "application:{id}" or "global" — kept as a string tag for MVP
+  scope       String // e.g. "project:{id}" or "global" — kept as a string tag for MVP
   expiresAt   DateTime
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
@@ -134,7 +114,7 @@ model ConfidentialDataGrant {
 
 // Append-only. No UPDATE/DELETE application-level path is exposed —
 // enforced in lib/audit.ts, and DB role privileges should mirror this
-// in production (see BUILD_PLAN.md Sec 2.3).
+// in production.
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?
@@ -152,12 +132,7 @@ model AuditLog {
 }
 
 enum DocumentOwnerType {
-  CANDIDATE
-  APPLICATION
-  REQUISITION
-  SCREENING_ASSESSMENT
-  EVALUATION
-  JOINING_CHECKLIST_ITEM
+  PROJECT
 }
 
 // Never stores the file itself — storageKey points at the S3-compatible
@@ -178,697 +153,253 @@ model Document {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 (Requisition -> Candidate): BUILD_PLAN.md Sec 3.1 item 2.
-// Screening/Interview/Evaluation/Approval-chain/Communication/Joining are
-// later phases — deliberately not modeled here (BUILD_PLAN.md Sec 2.3).
+// Project domain (BUILD_PLAN.md Sec 3-4): one Project per AI/software
+// initiative, tracked through a 10-stage gated pipeline from idea to
+// deployment. "One Project Owner · One Current Stage · One Next Milestone ·
+// One Next Action · One Expected Delivery Date" (assignment Sec 10).
 // ---------------------------------------------------------------------------
 
-enum RequisitionApprovalStatus {
-  DRAFT
-  AWAITING_APPROVAL
-  APPROVED
-  OPEN
-  ON_HOLD
-  FILLED
-  CLOSED
-}
-
-enum CandidateSource {
-  MANUAL_ENTRY
-  CV_UPLOAD
-  SPREADSHEET_IMPORT
-  JOB_PORTAL
-  REFERRAL
-  INTERNAL_POOL
-  RECRUITMENT_EVENT
-  HEADHUNTER
-}
-
-// PDF Sec 5 pipeline: New -> Screening -> Assessment -> Interview ->
-// Feedback Pending -> Approval -> Selected -> Joining -> Joined, plus
-// alternative outcomes On Hold / Rejected / Withdrawn / Redirected / Closed.
-enum ApplicationStage {
-  NEW
-  SCREENING
-  ASSESSMENT
-  INTERVIEW
-  FEEDBACK_PENDING
+// IDEA -> DISCOVERY -> REQUIREMENTS_DESIGN -> APPROVAL -> DEVELOPMENT ->
+// INTERNAL_TESTING -> BUSINESS_TESTING_UAT -> DEPLOYMENT -> STABILIZATION ->
+// COMPLETED (assignment Sec 3). Each forward transition is gated: all
+// required=true StageGateChecklistItem rows for the *current* stage must be
+// checked before the transition API writes ProjectStageHistory and advances
+// currentStage (lib/project-stages.ts).
+enum ProjectStage {
+  IDEA
+  DISCOVERY
+  REQUIREMENTS_DESIGN
   APPROVAL
-  SELECTED
-  JOINING
-  JOINED
-  ON_HOLD
-  REJECTED
-  WITHDRAWN
-  REDIRECTED
-  CLOSED
-}
-
-model Requisition {
-  id                  String                    @id @default(cuid())
-  businessUnitId      String
-  businessUnit        BusinessUnit              @relation(fields: [businessUnitId], references: [id])
-  departmentId        String
-  department          Department                @relation(fields: [departmentId], references: [id])
-  position            String
-  vacancyCount        Int
-  positionLevel       String
-  hiringManagerId     String
-  hiringManager       User                      @relation("RequisitionHiringManager", fields: [hiringManagerId], references: [id])
-  assignedRecruiterId String
-  assignedRecruiter   User                      @relation("RequisitionRecruiter", fields: [assignedRecruiterId], references: [id])
-  targetJoiningDate   DateTime
-  approvalStatus      RequisitionApprovalStatus @default(DRAFT)
-  erfRrfDocumentId    String?                   @unique
-  notes               String?
-  version             Int                       @default(1)
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-
-  applications Application[]
-
-  @@index([assignedRecruiterId])
-  @@index([businessUnitId, departmentId])
-  @@index([approvalStatus])
-  @@map("requisitions")
-}
-
-// Deliberately separate from Application — one candidate, many
-// applications (PDF Sec 6: "system should separate the candidate profile
-// from the job application, as one candidate may apply for multiple
-// positions").
-model Candidate {
-  id              String          @id @default(cuid())
-  name            String
-  mobileNumber    String
-  email           String
-  candidateSource CandidateSource
-  cvDocumentId    String?         @unique
-  version         Int             @default(1)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  applications Application[]
-
-  @@index([email])
-  @@index([mobileNumber])
-  @@map("candidates")
-}
-
-model Application {
-  id                  String           @id @default(cuid())
-  candidateId         String
-  candidate           Candidate        @relation(fields: [candidateId], references: [id])
-  requisitionId       String
-  requisition         Requisition      @relation(fields: [requisitionId], references: [id])
-  assignedRecruiterId String
-  assignedRecruiter   User             @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
-  currentStage        ApplicationStage @default(NEW)
-  nextAction          String?
-  nextActionOwnerId   String?
-  nextActionOwner     User?            @relation("ApplicationNextActionOwner", fields: [nextActionOwnerId], references: [id])
-  nextActionDueDate   DateTime?
-  version             Int              @default(1)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-
-  stageHistory StageHistory[]
-
-  // Phase 3 relations.
-  screeningAssessments ScreeningAssessment[]
-  interviews           Interview[]
-  communications       Communication[]
-
-  // Phase 5 relations.
-  approvalRequests ApprovalRequest[]
-
-  // Phase 6 relations.
-  joiningChecklistItems JoiningChecklistItem[]
-
-  @@index([assignedRecruiterId])
-  @@index([currentStage])
-  @@index([requisitionId])
-  @@index([candidateId])
-  @@index([nextActionOwnerId, nextActionDueDate])
-  @@map("applications")
-}
-
-// Append-only. No update path is exposed in the API for this model, ever —
-// per BUILD_PLAN.md Sec 2.3 ("Every stage change must create a permanent
-// history record" from PDF Sec 5).
-model StageHistory {
-  id            String            @id @default(cuid())
-  applicationId String
-  application   Application       @relation(fields: [applicationId], references: [id])
-  fromStage     ApplicationStage?
-  toStage       ApplicationStage
-  changedById   String
-  changedBy     User              @relation("StageHistoryChangedBy", fields: [changedById], references: [id])
-  changedAt     DateTime          @default(now())
-  notes         String?
-
-  @@index([applicationId])
-  @@map("stage_history")
-}
-
-// ---------------------------------------------------------------------------
-// Phase 3 (Screening + Interview Scheduling + Communication):
-// BUILD_PLAN.md Sec 3.1 item 3. Evaluation (Phase 4) is deliberately NOT
-// modeled beyond the `Interview.evaluationFormId` forward-compat
-// placeholder below — see that field's comment.
-// ---------------------------------------------------------------------------
-
-enum ScreeningAttendance {
-  ATTENDED
-  NO_SHOW
-  RESCHEDULED
-}
-
-// Recording a screening/telephone-assessment outcome for an application.
-// Per PDF Sec "Screening and Assessment": eligibility, screening comments,
-// telephone-assessment outcome, availability, recommendation, assessment
-// type, assessment score, attendance, uploaded assessment documents,
-// evaluator recommendation.
-//
-// Design decision (not spelled out field-by-field in the PDF): recording a
-// screening here does NOT itself transition Application.currentStage.
-// Eligibility/outcome here can resolve to several different next moves
-// (advance to assessment/interview, put on hold, reject outright) and the
-// PDF/BUILD_PLAN's stage-transition table (lib/application-stages.ts)
-// already models those as explicit recruiter-driven choices via
-// PATCH /applications/:id/stage. Auto-transitioning here would silently
-// hide that decision inside a record-creation endpoint — kept separate so
-// the recruiter always makes the stage call explicitly, using this record
-// as input. No update path is exposed for now (append rows for
-// re-screenings rather than mutate — mirrors StageHistory's insert-only
-// spirit even though this isn't a strict system-of-record audit log).
-model ScreeningAssessment {
-  id                         String               @id @default(cuid())
-  applicationId              String
-  application                Application          @relation(fields: [applicationId], references: [id])
-  eligibility                Boolean
-  screeningComments          String?
-  telephoneAssessmentOutcome String?
-  availability               String?
-  recommendation             String?
-  assessmentType             String?
-  assessmentScore            Float?
-  attendance                 ScreeningAttendance?
-  evaluatorRecommendation    String?
-  // Owner type SCREENING_ASSESSMENT — see lib/phase3-document-authz.ts for
-  // the download-authz checker registered at boot (instrumentation.ts).
-  assessmentDocumentId       String?              @unique
-  createdById                String
-  createdBy                  User                 @relation("ScreeningCreatedBy", fields: [createdById], references: [id])
-  createdAt                  DateTime             @default(now())
-  updatedAt                  DateTime             @updatedAt
-
-  @@index([applicationId])
-  @@map("screening_assessments")
-}
-
-enum InterviewStatus {
-  SCHEDULED
-  RESCHEDULED
+  DEVELOPMENT
+  INTERNAL_TESTING
+  BUSINESS_TESTING_UAT
+  DEPLOYMENT
+  STABILIZATION
   COMPLETED
-  CANCELLED
 }
 
-// Per PDF Sec "Interview Scheduling": multiple rounds, date/time/duration/
-// location/online link, panel assignment, evaluation-form assignment,
-// candidate instructions, reminders (reminder *sending* is the
-// Communication pipeline below, not modeled again here), rescheduling
-// history (InterviewRescheduleHistory).
-//
-// Design decision: scheduling a round DOES attempt to auto-transition
-// Application.currentStage to INTERVIEW (via lib/application-stages.ts'
-// isValidStageTransition), because unlike screening, "an interview has
-// been scheduled" maps unambiguously onto the pipeline's INTERVIEW stage
-// with no competing outcome — scheduling never means "reject" or "hold."
-// If the application is already at/past INTERVIEW (e.g. round 2+, or a
-// FEEDBACK_PENDING loop-back per lib/application-stages.ts), no forced
-// transition is attempted and scheduling proceeds regardless; if the
-// transition genuinely isn't valid from the current stage the route
-// still creates the Interview but does not force the stage (recruiter
-// keeps control) — see app/api/v1/applications/[id]/interviews/route.ts.
-model Interview {
-  id                    String          @id @default(cuid())
-  applicationId         String
-  application           Application     @relation(fields: [applicationId], references: [id])
-  roundNumber           Int
-  scheduledAt           DateTime
-  durationMinutes       Int
-  location              String?
-  onlineLink            String?
-  candidateInstructions String?
-  status                InterviewStatus @default(SCHEDULED)
-  // Forward-compat placeholder for Phase 4 (Evaluation module) — carries
-  // no relation/behavior yet, just reserves the column so Phase 4 doesn't
-  // need an extra migration solely to attach an evaluation form id.
-  evaluationFormId      String?
-  version               Int             @default(1)
-  createdById           String
-  createdBy             User            @relation("InterviewCreatedBy", fields: [createdById], references: [id])
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
-
-  panelists         InterviewPanelist[]
-  rescheduleHistory InterviewRescheduleHistory[]
-  evaluations       Evaluation[]
-
-  @@index([applicationId])
-  @@map("interviews")
+// Computed server-side (lib/project-health.ts), never set directly by a
+// user: ON_TRACK (default) -> AT_RISK (a milestone due within N days) ->
+// DELAYED (a milestone is overdue) -> BLOCKED (an active unresolved
+// Blocker exists, which takes priority over milestone-derived status).
+enum ProjectHealth {
+  ON_TRACK
+  AT_RISK
+  DELAYED
+  BLOCKED
 }
 
-// Panel assignment as a join table (not a string[]) specifically so panel
-// members' "my assigned interviews" queries (Phase 4) can filter by
-// userId directly rather than scanning/unpacking an array column.
-model InterviewPanelist {
-  id          String    @id @default(cuid())
-  interviewId String
-  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  assignedAt  DateTime  @default(now())
+model Project {
+  id                    String        @id @default(cuid())
+  name                  String
+  businessUnitId        String
+  businessUnit          BusinessUnit  @relation(fields: [businessUnitId], references: [id])
+  departmentId          String
+  department            Department    @relation(fields: [departmentId], references: [id])
+  businessProblem       String
+  expectedOutcome       String
+  ownerId               String
+  owner                 User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  analystId             String?
+  analyst               User?         @relation("ProjectAnalyst", fields: [analystId], references: [id])
+  developerId           String?
+  developer             User?         @relation("ProjectDeveloper", fields: [developerId], references: [id])
+  currentStage          ProjectStage  @default(IDEA)
+  health                ProjectHealth @default(ON_TRACK)
+  expectedDeliveryDate  DateTime
+  version               Int           @default(1)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
-  @@unique([interviewId, userId])
-  @@index([userId])
-  @@map("interview_panelists")
+  stageHistory        ProjectStageHistory[]
+  gateChecklistItems  StageGateChecklistItem[]
+  milestones          Milestone[]
+  tasks               ProjectTask[]
+  blockers            Blocker[]
+  scopeChanges        ScopeChange[]
+  delayReasons        DelayReason[]
+
+  @@index([businessUnitId, departmentId])
+  @@index([currentStage])
+  @@index([health])
+  @@index([ownerId])
+  @@map("projects")
 }
 
-// Append-only, mirrors StageHistory's pattern (BUILD_PLAN.md Sec 2.3) —
-// every reschedule of an Interview creates one row here rather than just
-// overwriting scheduledAt, per PDF's explicit "Rescheduling history"
-// requirement.
-model InterviewRescheduleHistory {
-  id                  String    @id @default(cuid())
-  interviewId         String
-  interview           Interview @relation(fields: [interviewId], references: [id])
-  previousScheduledAt DateTime
-  newScheduledAt      DateTime
-  reason              String?
-  changedById         String
-  changedBy           User      @relation("InterviewRescheduleChangedBy", fields: [changedById], references: [id])
-  changedAt           DateTime  @default(now())
+// Append-only. Every stage change — forced or otherwise — creates a
+// permanent history record with an evidence snapshot of the gate checklist
+// state at the moment of transition.
+model ProjectStageHistory {
+  id                String        @id @default(cuid())
+  projectId         String
+  project           Project       @relation(fields: [projectId], references: [id])
+  fromStage         ProjectStage?
+  toStage           ProjectStage
+  actorId           String
+  actor             User          @relation("StageHistoryActor", fields: [actorId], references: [id])
+  evidenceSnapshot  Json?
+  notes             String?
+  changedAt         DateTime      @default(now())
 
-  @@index([interviewId])
-  @@map("interview_reschedule_history")
+  @@index([projectId])
+  @@map("project_stage_history")
 }
 
-enum CommunicationChannel {
-  EMAIL
-  WHATSAPP
+// Exit criteria checklist, seeded per stage from the assignment's Sec 5
+// gate list (lib/checklist-engine.ts). A project's transition out of its
+// *current* stage is blocked while any required=true item for that stage
+// is unchecked.
+model StageGateChecklistItem {
+  id            String        @id @default(cuid())
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id])
+  stage         ProjectStage
+  label         String
+  required      Boolean       @default(true)
+  checked       Boolean       @default(false)
+  checkedById   String?
+  checkedBy     User?         @relation("ChecklistCheckedBy", fields: [checkedById], references: [id])
+  checkedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([projectId, stage])
+  @@map("stage_gate_checklist_items")
 }
 
-// Categories per PDF Sec "Communication": interview invitations,
-// reminders, rescheduling, document requests, selection, rejection,
-// joining reminders.
-enum MessageTemplateCategory {
-  INTERVIEW_INVITATION
-  INTERVIEW_REMINDER
-  RESCHEDULING
-  DOCUMENT_REQUEST
-  SELECTION
-  REJECTION
-  JOINING_REMINDER
-}
-
-// Versioned, pre-approved template — required because WhatsApp Business
-// API needs Meta-approved templates for business-initiated conversations
-// (BUILD_PLAN.md Sec 2.10/assumption 3), and treating email the same way
-// keeps one code path for both channels.
-//
-// `allowedFields` is a per-template allowlist of placeholder names a
-// recruiter/admin declares this template may use. It is NOT the sole
-// security control — lib/message-templates.ts intersects this list
-// against a hardcoded SAFE_FIELD_REGISTRY at render time, and
-// `internal_notes`/`rejection_reason` (or any field carrying free-text
-// internal reasoning) are structurally never members of that registry,
-// so no template misconfiguration can ever cause them to render into a
-// candidate-facing message (see that file's doc comment for the full
-// argument).
-model MessageTemplate {
-  id            String                  @id @default(cuid())
-  name          String
-  channel       CommunicationChannel
-  category      MessageTemplateCategory
-  subject       String?
-  bodyTemplate  String
-  allowedFields String[]
-  version       Int                     @default(1)
-  isActive      Boolean                 @default(true)
-  createdById   String
-  createdBy     User                    @relation("MessageTemplateCreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
-
-  communications Communication[]
-
-  @@index([channel, category, isActive])
-  @@map("message_templates")
-}
-
-// Status machine locked by BUILD_PLAN.md Sec 2.8:
-// Drafted -> Awaiting Approval -> Approved -> (enqueue) -> Sent ->
-// Delivered | Failed. `renderedBody`/`renderedSubject` are snapshotted at
-// draft time from lib/message-templates.ts's renderTemplate() output, so
-// later edits to the MessageTemplate never retroactively change history
-// a recruiter already approved/sent.
-model Communication {
-  id                String               @id @default(cuid())
-  applicationId     String
-  application       Application          @relation(fields: [applicationId], references: [id])
-  templateId        String
-  template          MessageTemplate      @relation(fields: [templateId], references: [id])
-  channel           CommunicationChannel
-  status            CommunicationStatus  @default(DRAFTED)
-  renderedSubject   String?
-  renderedBody      String
-  draftedById       String
-  draftedBy         User                 @relation("CommunicationDraftedBy", fields: [draftedById], references: [id])
-  approvedById      String?
-  approvedBy        User?                @relation("CommunicationApprovedBy", fields: [approvedById], references: [id])
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-  failureReason     String?
-  providerMessageId String?
-  version           Int                  @default(1)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-
-  @@index([applicationId])
-  @@index([status])
-  @@map("communications")
-}
-
-enum CommunicationStatus {
-  DRAFTED
-  AWAITING_APPROVAL
-  APPROVED
-  SENT
-  DELIVERED
-  FAILED
-}
-
-// ---------------------------------------------------------------------------
-// Phase 4 (Interview Evaluation + Feedback): BUILD_PLAN.md Sec 3.1 item 4.
-// Approval-chain-config and Joining are later phases — deliberately not
-// modeled here.
-// ---------------------------------------------------------------------------
-
-// Scored-criteria vs. free-text split (documented design decision — the
-// PDF's "Interview Evaluation" section lists a mix of scored criteria and
-// narrative fields without drawing this line itself):
-//   - EvaluationFormTemplate.criteria (scored, structured, varies by
-//     roleType so a form can be configured per role): relevant
-//     experience, technical/functional capability, communication,
-//     problem-solving, leadership. Each criterion is
-//     { key, label, description, scoreMax } and an Evaluation's `scores`
-//     JSON is a { [criterionKey]: number } map keyed against whichever
-//     template it was filled against.
-//   - Evaluation's own fixed narrative fields (NOT part of the
-//     configurable template, since the PDF lists these as constant
-//     across every evaluation regardless of role type): strengths,
-//     concerns, organizationalSuitability (all free text) and
-//     overallRecommendation (a fixed enum — see OverallRecommendation
-//     below). These never vary per roleType, unlike the scored criteria.
-//
-// `roleType` is kept as a plain String (not an enum) so TA_ADMIN/
-// TECH_ADMIN can introduce a new evaluation-form category (e.g.
-// "Sales", "Executive") as a data change, mirroring the
-// ApprovalChainConfig / MessageTemplate "configuration is a data change,
-// not a deploy" philosophy elsewhere in this schema.
-model EvaluationFormTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  roleType    String
-  // Json array of { key: string, label: string, description?: string,
-  // scoreMax: number } — validated by lib/evaluation-forms.ts at
-  // create/update time, not by a DB constraint.
-  criteria    Json
-  isActive    Boolean  @default(true)
-  createdById String
-  createdBy   User     @relation("EvaluationFormTemplateCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  evaluations Evaluation[]
-
-  @@index([roleType, isActive])
-  @@map("evaluation_form_templates")
-}
-
-// Values chosen to mirror a typical 5-point hiring-recommendation scale
-// used in the PDF's "overall recommendation" field — documented design
-// decision, not spelled out verbatim in the PDF.
-enum OverallRecommendation {
-  STRONG_YES
-  YES
-  NEUTRAL
-  NO
-  STRONG_NO
-}
-
-// One row per (interview, panelist) — a panelist's evaluation of one
-// interview round. `submittedAt` is the blind-until-submit lock point
-// (BUILD_PLAN.md Sec 2.3): null means still a draft the panelist can
-// freely edit; once set, the row is IMMUTABLE (enforced in the API
-// route, not a DB trigger — see app/api/v1/interviews/[id]/evaluations/
-// route.ts) and becomes visible to peer panelists per the rule in
-// lib/evaluation-visibility.ts.
-model Evaluation {
-  id                        String                 @id @default(cuid())
-  interviewId               String
-  interview                 Interview              @relation(fields: [interviewId], references: [id])
-  panelistId                String
-  panelist                  User                   @relation("EvaluationPanelist", fields: [panelistId], references: [id])
-  evaluationFormTemplateId  String
-  evaluationFormTemplate    EvaluationFormTemplate @relation(fields: [evaluationFormTemplateId], references: [id])
-  // { [criterionKey]: number } matching evaluationFormTemplate.criteria.
-  scores                    Json
-  strengths                 String?
-  concerns                  String?
-  organizationalSuitability String?
-  overallRecommendation     OverallRecommendation?
-  submittedAt               DateTime?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-
-  @@unique([interviewId, panelistId])
-  @@index([interviewId])
-  @@index([panelistId])
-  @@map("evaluations")
-}
-
-// ---------------------------------------------------------------------------
-// Phase 5 (Approval + Decision): BUILD_PLAN.md Sec 3.1 item 5 / Sec 2.9
-// (LOCKED design: ApprovalChainConfig maps (business_unit_id,
-// department_id, position_level) -> an ordered list of approver roles;
-// "adding/changing a chain is a data change, not a deploy"). This is
-// explicitly NOT a general-purpose workflow engine (BUILD_PLAN's
-// "Features intentionally excluded" list) — no conditional branching, no
-// dynamic step insertion. Joining (Phase 6) is deliberately not modeled
-// here.
-// ---------------------------------------------------------------------------
-
-// Ordered approver-role list, schema-shape decision: ApprovalChainStep
-// join table with a `sequence` int column (NOT a JSON array on
-// ApprovalChainConfig). Chosen over JSON because "who approves at step
-// N" needs to be directly queryable/indexable (ApprovalDecision snapshots
-// approverRole per step, and recordDecision() needs to look up "the step
-// at index N for this chain" without deserializing/parsing a JSON blob),
-// and because a relational step table is easier to eventually inspect/
-// audit ("show me every chain that has TA_ADMIN at step 2") than a JSON
-// array would be. The tradeoff is one extra table + a join on chain
-// resolution — acceptable given approval-chain lookups are low-volume
-// (once per application reaching APPROVAL) and not on any hot path.
-model ApprovalChainConfig {
-  id             String   @id @default(cuid())
-  businessUnitId String
-  departmentId   String
-  // Free String to match Requisition.positionLevel's existing type
-  // (Phase 2 kept it a free string, not an enum) — a chain config must be
-  // able to key off exactly the same value a Requisition/Application
-  // carries.
-  positionLevel  String
-  // Only one ACTIVE chain per (businessUnitId, departmentId,
-  // positionLevel) should exist at a time. Design decision: this is
-  // enforced in application logic (lib/approval-chain.ts's create path
-  // deactivates any prior active row for the same triple inside the same
-  // transaction that creates the new one), NOT a DB-level unique
-  // constraint — a true unique on (businessUnitId, departmentId,
-  // positionLevel, isActive) would also cap the number of INACTIVE
-  // (historical, superseded) rows for a triple at one, which defeats
-  // keeping history across multiple chain revisions. Postgres partial
-  // unique indexes (`WHERE isActive`) would solve this cleanly but
-  // aren't expressible in the Prisma schema without a raw-SQL migration
-  // extension; revisit if this ever proves insufficient in practice.
-  // `version` increments each time a triple's chain is superseded.
-  isActive       Boolean  @default(true)
-  version        Int      @default(1)
-  createdById    String
-  createdBy      User     @relation("ApprovalChainConfigCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  steps            ApprovalChainStep[]
-  approvalRequests ApprovalRequest[]
-
-  @@index([businessUnitId, departmentId, positionLevel, isActive])
-  @@map("approval_chain_configs")
-}
-
-// One row per step of the ordered approver-role list. `sequence` is
-// 0-based to match ApprovalRequest.currentStepIndex/
-// ApprovalDecision.stepIndex directly (no off-by-one translation
-// anywhere in lib/approval-chain.ts).
-model ApprovalChainStep {
-  id            String              @id @default(cuid())
-  chainConfigId String
-  chainConfig   ApprovalChainConfig @relation(fields: [chainConfigId], references: [id], onDelete: Cascade)
-  sequence      Int
-  approverRole  Role
-  createdAt     DateTime            @default(now())
-
-  @@unique([chainConfigId, sequence])
-  @@index([chainConfigId])
-  @@map("approval_chain_steps")
-}
-
-enum ApprovalRequestStatus {
+enum MilestoneStatus {
   PENDING
   IN_PROGRESS
-  APPROVED
-  REJECTED
-  WITHDRAWN
+  DONE
 }
 
-// The candidate-SELECTION approval, tied to an Application — a
-// deliberately separate flow from Requisition.approvalStatus (Phase 2's
-// requisition-approval, already built; do not confuse the two per
-// BUILD_PLAN.md). One Application may have more than one ApprovalRequest
-// over time (e.g. a WITHDRAWN/REJECTED request followed by a fresh one
-// after re-evaluation) — no uniqueness constraint forces "at most one
-// ever," only the application layer's own judgment about when it's
-// sensible to initiate another.
-model ApprovalRequest {
-  id               String                @id @default(cuid())
-  applicationId    String
-  application      Application           @relation(fields: [applicationId], references: [id])
-  // Snapshot of which chain applied at initiation time — later edits to
-  // ApprovalChainConfig (or its steps) never retroactively change an
-  // in-flight or historical ApprovalRequest, mirroring the
-  // Communication.renderedBody snapshot pattern from Phase 3.
-  chainConfigId    String
-  chainConfig      ApprovalChainConfig   @relation(fields: [chainConfigId], references: [id])
-  currentStepIndex Int                   @default(0)
-  status           ApprovalRequestStatus @default(PENDING)
-  initiatedById    String
-  initiatedBy      User                  @relation("ApprovalRequestInitiatedBy", fields: [initiatedById], references: [id])
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+// "One Next Milestone" per project (design principle) — drives health
+// computation: overdue (dueDate < now, status != DONE) -> DELAYED,
+// due within N days -> AT_RISK.
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id])
+  name        String
+  ownerId     String
+  owner       User            @relation("MilestoneOwner", fields: [ownerId], references: [id])
+  dueDate     DateTime
+  status      MilestoneStatus @default(PENDING)
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  decisions ApprovalDecision[]
+  tasks       ProjectTask[]
+  delayReasons DelayReason[]
 
-  @@index([applicationId])
+  @@index([projectId])
+  @@index([ownerId, dueDate])
   @@index([status])
-  @@map("approval_requests")
+  @@map("milestones")
 }
 
-enum ApprovalDecisionStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-// Design decision: ApprovalDecision rows are created UPFRONT (all steps
-// at once, when the ApprovalRequest is initiated) rather than lazily as
-// each step is reached. Chosen because the PDF's "Decisions and
-// Approvals" visibility language ("recruiters should see... missing
-// feedback") argues for the same style of upfront visibility as
-// blind-until-submit Evaluation rows — "step 3 of 5, waiting on Dept
-// Head" must be directly queryable the moment the request is initiated,
-// not reconstructed by inferring what future steps *would* be from the
-// chain config. `approverRole` is snapshotted per row for the same
-// reason as ApprovalRequest.chainConfigId — a later chain edit must not
-// silently change who was recorded as responsible for a past decision.
-model ApprovalDecision {
-  id                String                 @id @default(cuid())
-  approvalRequestId String
-  approvalRequest   ApprovalRequest        @relation(fields: [approvalRequestId], references: [id])
-  stepIndex         Int
-  approverRole      Role
-  decidedById       String?
-  decidedBy         User?                  @relation("ApprovalDecisionDecidedBy", fields: [decidedById], references: [id])
-  decision          ApprovalDecisionStatus @default(PENDING)
-  comments          String?
-  decidedAt         DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-
-  @@unique([approvalRequestId, stepIndex])
-  @@index([approvalRequestId])
-  @@map("approval_decisions")
-}
-
-// ---------------------------------------------------------------------------
-// Phase 6 (Joining Coordination): BUILD_PLAN.md Sec 3.1 item 6. PDF's
-// "Joining Coordination" section: "A simple checklist should cover:
-// Candidate acceptance, Required documents, Reference check, Offer
-// letter, Joining date, IT request, Workspace, ID card, Transport,
-// Induction, Department notification, Joining completion, Departmental
-// handover. Each item should have an owner, due date, status, and
-// optional evidence." Modeled exactly that literally — one row per
-// checklist item, per application.
-// ---------------------------------------------------------------------------
-
-// Deliberately 4 states, not just PENDING/DONE — "IN_PROGRESS" and
-// "BLOCKED" are the minimum extra vocabulary a coordination checklist
-// needs to be useful (Sec 8's Recruiter Dashboard lists both "Joining
-// actions" and "Overdue tasks", which implies items have a lifecycle,
-// not just a checkbox). Still deliberately NOT a generalized task-
-// workflow engine (BUILD_PLAN's exclusion list) — no sub-statuses, no
-// per-item custom transition rules, just this one fixed enum reused for
-// every item on every application.
-enum JoiningChecklistItemStatus {
+enum TaskStatus {
   PENDING
   IN_PROGRESS
   DONE
   BLOCKED
 }
 
-// Per-application checklist row. Applications reach this once they hit
-// ApplicationStage.JOINING (lib/application-stages.ts) — a default set
-// of items (lib/joining-checklist.ts's DEFAULT_CHECKLIST_TEMPLATE,
-// taken verbatim from the PDF's list) is seeded automatically the first
-// time an application transitions into JOINING (see the stage route),
-// but ad hoc items can also be added/removed via the checklist API for
-// cases the fixed template doesn't cover.
-model JoiningChecklistItem {
-  id            String                      @id @default(cuid())
-  applicationId String
-  application   Application                 @relation(fields: [applicationId], references: [id])
-  label         String
-  ownerId       String
-  owner         User                        @relation("JoiningChecklistItemOwner", fields: [ownerId], references: [id])
-  dueDate       DateTime?
-  status        JoiningChecklistItemStatus  @default(PENDING)
-  completedAt   DateTime?
-  // Optional evidence document (e.g. signed offer letter, ID card
-  // photo). Stored as a plain id, not a Prisma relation, matching the
-  // existing convention (Candidate.cvDocumentId, Requisition.erfRrfDocumentId)
-  // — the Document row itself carries ownerType JOINING_CHECKLIST_ITEM /
-  // ownerId = this row's id for authz purposes (lib/phase6-document-authz.ts).
-  documentId    String?                     @unique
-  notes         String?
-  version       Int                         @default(1)
-  createdById   String
-  createdBy     User                        @relation("JoiningChecklistItemCreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime                    @default(now())
-  updatedAt     DateTime                    @updatedAt
+// "One Next Action" per project (design principle). Optionally tied to a
+// Milestone for grouping, but not required — an ad hoc action doesn't need
+// a milestone to exist.
+model ProjectTask {
+  id                String      @id @default(cuid())
+  projectId         String
+  project           Project     @relation(fields: [projectId], references: [id])
+  action            String
+  ownerId           String
+  owner             User        @relation("TaskOwner", fields: [ownerId], references: [id])
+  deadline          DateTime?
+  status            TaskStatus  @default(PENDING)
+  relatedMilestoneId String?
+  relatedMilestone  Milestone?  @relation(fields: [relatedMilestoneId], references: [id])
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  @@index([applicationId])
-  @@index([ownerId, dueDate])
+  @@index([projectId])
+  @@index([ownerId, deadline])
   @@index([status])
-  @@map("joining_checklist_items")
+  @@map("project_tasks")
+}
+
+// An active (unresolved) Blocker forces Project.health to BLOCKED,
+// overriding the milestone-derived status — resolving it re-triggers
+// health recomputation from the remaining milestone state.
+model Blocker {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id])
+  description     String
+  impact          String
+  requiredAction  String?
+  raisedById      String
+  raisedBy        User      @relation("BlockerRaisedBy", fields: [raisedById], references: [id])
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolvedBy      User?     @relation("BlockerResolvedBy", fields: [resolvedById], references: [id])
+  resolutionNotes String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, resolvedAt])
+  @@map("blockers")
+}
+
+// Records a scope change request and its delivery-date impact. Append-only
+// log, not itself a workflow — recording one does not automatically shift
+// Project.expectedDeliveryDate; that remains an explicit edit.
+model ScopeChange {
+  id                           String    @id @default(cuid())
+  projectId                    String
+  project                      Project   @relation(fields: [projectId], references: [id])
+  requestedById                String
+  requestedBy                  User      @relation("ScopeChangeRequestedBy", fields: [requestedById], references: [id])
+  reason                       String
+  deliveryImpact               String?
+  previousExpectedDeliveryDate DateTime?
+  newExpectedDeliveryDate      DateTime?
+  createdAt                    DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("scope_changes")
+}
+
+// Fixed taxonomy (assignment Sec 8). Capturing one of these is mandatory
+// the moment a Project or Milestone crosses into DELAYED health — enforced
+// in lib/project-health.ts, not a DB constraint.
+enum DelayReasonCategory {
+  REQUIREMENTS_NOT_FINALIZED
+  RESOURCE_UNAVAILABLE
+  WAITING_FOR_BUSINESS_FEEDBACK
+  SCOPE_CHANGE
+  DATA_UNAVAILABLE
+  TESTING_ISSUE
+  DEVELOPMENT_ISSUE
+  APPROVAL_PENDING
+  INTEGRATION_DEPENDENCY
+  OTHER
+}
+
+model DelayReason {
+  id            String              @id @default(cuid())
+  projectId     String
+  project       Project             @relation(fields: [projectId], references: [id])
+  milestoneId   String?
+  milestone     Milestone?          @relation(fields: [milestoneId], references: [id])
+  category      DelayReasonCategory
+  note          String?
+  recordedById  String
+  recordedBy    User                @relation("DelayReasonRecordedBy", fields: [recordedById], references: [id])
+  createdAt     DateTime            @default(now())
+
+  @@index([projectId])
+  @@index([milestoneId])
+  @@map("delay_reasons")
 }

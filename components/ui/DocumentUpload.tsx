@@ -1,9 +1,9 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import type { DocumentOwnerType } from "@prisma/client";
 import { ApiRequestError, postJson } from "@/lib/api-client";
 import { formatDateTime, formatFileSize } from "@/lib/format";
-import type { DocumentRef } from "@/lib/types/domain";
 import {
   ALLOWED_UPLOAD_TYPES_LABEL,
   UPLOAD_ACCEPT,
@@ -12,14 +12,14 @@ import {
 import { DownloadIcon, PaperclipIcon } from "./icons";
 import { InlineBanner, LiveRegion } from "./InlineBanner";
 
-/** Owner types the presign route accepts (Prisma `DocumentOwnerType`). */
-export type DocumentOwnerType =
-  | "CANDIDATE"
-  | "APPLICATION"
-  | "REQUISITION"
-  | "SCREENING_ASSESSMENT"
-  | "EVALUATION"
-  | "JOINING_CHECKLIST_ITEM";
+/** An already-attached document, as returned by the documents API. */
+export interface DocumentRef {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  uploadedBy: string;
+}
 
 interface PresignUploadResult {
   uploadUrl: string;
@@ -274,24 +274,10 @@ export function DocumentUpload({
 /* ──────────────────────────────────────────────────────────────────────────
  * BACKEND HAND-OFF — document persistence
  *
- * TODO(backend): **nothing creates a `Document` row.** Steps 1 and 2 above
- * (presign + PUT) are real and complete, so bytes reach the object store — but
- * the row that makes them findable does not exist, and both
- * `POST /api/v1/requisitions` (`erfRrfDocumentId`) and
- * `POST /api/v1/candidates` (`cvDocumentId`) expect a `Document` id that has
- * no way of being produced. The missing piece is one route:
- *
- *     POST /api/v1/documents   { ownerType, ownerId, storageKey, fileName,
- *                                contentType, sizeBytes }  -> Document
- *
- * Once it exists, this component calls it from `onUploaded` and returns the
- * new `DocumentRef`. Search for `onUploaded={` to find every call site
- * (currently none pass it: the requisition detail and candidate workspace
- * render this from server components, which cannot pass functions — those
- * become small client wrappers at the same time).
- *
- * DONE (backend, Phase 2): `REQUISITION`, `CANDIDATE` and `APPLICATION`
- * download-authz checkers are registered at boot via `instrumentation.ts` ->
- * `lib/phase2-document-authz.ts`, so the Download link above is live once a
- * real `Document` row exists to point it at.
+ * TODO(backend): the presigned upload (steps 1-2) is real; step 3 — the
+ * caller creating the `Document` row for `storageKey` via `onUploaded` — is
+ * wired up per owner type as the ProjectFlow domain routes land. Each owner
+ * type also needs a `DocumentDownloadAuthzChecker` registered at boot
+ * (`instrumentation.ts`) or the Download link above 403s — `lib/documents.ts`
+ * fails closed for any `DocumentOwnerType` with no checker registered.
  * ────────────────────────────────────────────────────────────────────────── */

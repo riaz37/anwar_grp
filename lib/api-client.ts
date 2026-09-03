@@ -88,3 +88,45 @@ export async function postJson<T>(
 
   return envelope.data as T;
 }
+
+/**
+ * PATCHes JSON and unwraps the envelope. Same behavior as `postJson` — see
+ * its doc comment for the error-handling contract.
+ */
+export async function patchJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw new ApiRequestError(
+      "Couldn’t reach the server. Check your connection and try again.",
+      0,
+      "NETWORK_ERROR",
+    );
+  }
+
+  const envelope = (await response
+    .json()
+    .catch(() => null)) as ApiEnvelope<T> | null;
+
+  if (!response.ok || !envelope?.success) {
+    throw new ApiRequestError(
+      envelopeMessage(envelope?.error ?? null) ??
+        "The server rejected that request. Try again, or contact your administrator.",
+      response.status,
+      envelopeCode(envelope?.error ?? null),
+    );
+  }
+
+  return envelope.data as T;
+}

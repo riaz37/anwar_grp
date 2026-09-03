@@ -1,13 +1,9 @@
 import type { ComponentType, SVGProps } from "react";
 import {
   AdministrationIcon,
-  CandidatesIcon,
   HomeIcon,
-  InterviewsIcon,
-  JoiningIcon,
-  MessagesIcon,
+  ProjectsIcon,
   ReportsIcon,
-  RequisitionsIcon,
   TasksIcon,
 } from "./icons";
 
@@ -20,9 +16,9 @@ export type NavItem = {
 };
 
 /**
- * Fixed 9-item navigation from Sec 7 of the assignment spec. The order and
- * membership of this list are specified, not a design choice — see DESIGN.md
- * > Layout ("a layout that serves the nav structure, not reinterprets it").
+ * Primary navigation for Anwar AI ProjectFlow: Home, My Work (role-scoped
+ * assignments), Portfolio (all projects), Management Dashboard, and
+ * Administration. See DESIGN.md > Layout.
  *
  * Role-based visibility filtering happens here once sessions are wired; the
  * client nav is a UX convenience, never the authorization boundary
@@ -30,13 +26,9 @@ export type NavItem = {
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Home", href: "/", icon: HomeIcon, primary: true },
-  { label: "My Tasks", href: "/tasks", icon: TasksIcon, primary: true },
-  { label: "Requisitions", href: "/requisitions", icon: RequisitionsIcon },
-  { label: "Candidates", href: "/candidates", icon: CandidatesIcon, primary: true },
-  { label: "Interviews", href: "/interviews", icon: InterviewsIcon },
-  { label: "Messages", href: "/messages", icon: MessagesIcon },
-  { label: "Joining", href: "/joining", icon: JoiningIcon },
-  { label: "Reports", href: "/reports", icon: ReportsIcon },
+  { label: "My Work", href: "/my-work", icon: TasksIcon, primary: true },
+  { label: "Portfolio", href: "/projects", icon: ProjectsIcon, primary: true },
+  { label: "Management Dashboard", href: "/dashboard", icon: ReportsIcon },
   { label: "Administration", href: "/administration", icon: AdministrationIcon },
 ] as const;
 

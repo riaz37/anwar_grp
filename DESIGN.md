@@ -1,14 +1,25 @@
-# Design System — Anwar TalentFlow
+# Design System — Anwar AI ProjectFlow
+
+**Superseded product context (2026-09-03):** the assignment pivoted from
+Anwar TalentFlow (recruitment ATS, below) to Anwar AI ProjectFlow (AI/software
+project governance). The tokens below (typography, color, spacing, motion,
+accessibility) carry over unchanged — they were never TalentFlow-specific.
+Product Context and Layout are rewritten for the new product; Reference sites
+below are retained as a category-convention anchor for a different reason
+(project-tracking tools, not recruiting tools).
 
 ## Product Context
-- **What this is:** A low-friction Talent Acquisition coordination system —
-  one recruiter, one current stage, one next action/owner/due-date per
-  active application, visible by role.
-- **Who it's for:** TA administrators, recruiters, department heads/hiring
-  managers, interview panelists, HR leadership, authorized audit users,
-  technical administrators.
-- **Space/industry:** Internal HR/recruiting ops tooling (category peers:
-  Greenhouse, Lever, Workday Recruiting, BambooHR).
+- **What this is:** A lightweight project-governance system for Anwar
+  Group's internal AI/software initiatives — one owner, one current stage,
+  one next milestone/action/expected-delivery-date per active project,
+  visible by role. North star: management can see in seconds where every
+  project stands, what's late, why, who owns the next move, and when it
+  ships.
+- **Who it's for:** AI Analysts, Developers, Business Owners, AI Team
+  Leads/PMs, Management.
+- **Space/industry:** Internal project-governance/PM tooling (category
+  peers: Linear, Height, a lightweight Jira — deliberately not full Jira
+  per the assignment's explicit exclusion).
 - **Project type:** Internal web app — dense data workspace + role-based
   dashboards, not a marketing site.
 
@@ -17,13 +28,13 @@
   palette.
 - **Decoration level:** Minimal — typography and spacing do the work; status
   color is reserved for meaning, never decoration.
-- **Mood:** Calm and trustworthy. This is a coordination layer over an
-  existing manual process (Sec 1 of the assignment spec), not a
-  feature-flexing ATS competing on breadth — the UI should feel like a
-  well-organized shared source of truth, not enterprise software performing
-  its own importance.
-- **Reference sites:** Greenhouse, Lever (candidate-profile consolidation,
-  pipeline-stage visualization — safe/category-convention choices).
+- **Mood:** Calm and trustworthy. This is a governance layer over projects
+  already happening, not a feature-flexing PM tool competing on breadth —
+  the UI should feel like a well-organized shared source of truth, not
+  software performing its own importance.
+- **Reference sites:** Linear, Height (calm status/stage visualization,
+  restrained color-as-meaning — safe/category-convention choices for a
+  project-tracking tool).
 
 ## Typography
 - **Display/Hero:** General Sans — clean grotesk, quiet personality, avoids
@@ -69,14 +80,15 @@
 
 ## Layout
 - **Approach:** Grid-disciplined — strict columns, predictable alignment.
-  Not a place for creative/editorial layout; Sec 7 of the assignment spec
-  already fixes a 9-item nav structure (Home, My Tasks, Requisitions,
-  Candidates, Interviews, Messages, Joining, Reports, Administration) that
-  the layout serves, not reinterprets.
+  Not a place for creative/editorial layout. Nav structure (per BUILD_PLAN.md
+  Sec 5): Portfolio (all projects), Management Dashboard, plus whatever a
+  role-scoped "my work" view needs (assigned projects/milestones/blockers) —
+  finalized when the UI build step details the exact routes.
 - **Grid:** 12-column on desktop (≥1024px), single-column stacked with
   persistent left rail collapsed to icons on tablet (768–1023px), bottom
-  bar (Home/My Tasks/Candidates) + slide-out drawer for the rest on mobile
-  (<768px) — locked in `/plan-design-review`.
+  bar + slide-out drawer for the rest on mobile (<768px) — same structural
+  pattern locked in the prior `/plan-design-review`, reapplied to the new
+  nav items.
 - **Max content width:** 1440px (dashboards/tables can use full width
   within this; forms and detail panels cap at 720px for readability).
 - **Border radius:** sm 4px (inputs, pills), md 8px (cards, panels), lg
@@ -95,10 +107,10 @@
 
 ## Accessibility (from `/plan-design-review`)
 - Body text ≥16px, contrast ≥4.5:1 in both light and dark mode.
-- Touch targets ≥44px on all message-approval and joining-checklist action
-  buttons.
-- Keyboard nav: every approval/decision action reachable and triggerable
-  without a mouse.
+- Touch targets ≥44px on all stage-gate checklist and blocker-resolution
+  action buttons.
+- Keyboard nav: every stage-transition and gate-checklist action reachable
+  and triggerable without a mouse.
 - Stage-change and conflict-banner events use an ARIA live region so
   status changes are announced, not just visually shown.
 - Visited vs. unvisited link distinction preserved everywhere.
@@ -109,3 +121,4 @@
 | 2026-09-02 | Initial design system created | Created by `/design-consultation` based on the Anwar TalentFlow assignment spec, the `/plan-eng-review` architecture decisions, and the `/plan-design-review` structural UX decisions (task-first Home, calm register, inline conflict banner, mobile nav, candidate tab-strip). Research: Greenhouse/Lever category conventions + 2026 dashboard-UX trends (WebSearch, see build-plan doc). |
 | 2026-09-02 | Skipped AI-mockup preview (Phase 5) | `$D` (gstack designer) needs an OpenAI API key not configured in this environment; user opted to skip the HTML-preview fallback too and write DESIGN.md directly from the Phase 3 proposal. |
 | 2026-09-02 | Added `--accent-ink`/`--warning-ink` text variants | The spec'd `#B5793A` (3.66:1) and `#B8862F` (3.26:1) fail the 4.5:1 body-text contrast rule above on `#FAFAF8`. Darker "-ink" companions (accent-ink `#8F5A22` 5.6:1, warning-ink `#8A6420` 6.1:1) are used for text/primary-button fill; the spec hex stays the fill/border/marker/dot color. Discovered and fixed during Phase 1 frontend implementation — see `app/globals.css`. |
+| 2026-09-03 | Product context and nav sections rewritten for Anwar AI ProjectFlow | Assignment pivoted from a recruitment ATS to an AI/software project-governance system (see BUILD_PLAN.md). Typography/color/spacing/motion/accessibility tokens carried over unchanged — never product-specific. |
