@@ -20,8 +20,8 @@ export default function AuthLayout({
 
       <footer className="mx-auto w-full max-w-[720px] px-md pb-lg">
         <p className="text-caption text-muted">
-          Internal system — Anwar Group Talent Acquisition. Access is recorded
-          in the audit log.
+          Internal system — Anwar Group AI &amp; Digital Transformation.
+          Access is recorded in the audit log.
         </p>
       </footer>
     </div>
