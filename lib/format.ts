@@ -1,12 +1,12 @@
 /**
- * Display formatters shared across the Requisition/Candidate/Application
- * views. All of them are deterministic given their input (no `Date.now()`
- * except where the caller passes `now`), so a server-rendered value and its
- * client rehydration agree.
+ * Display formatters shared across the Project views. All of them are
+ * deterministic given their input (no `Date.now()` except where the
+ * caller passes `now`), so a server-rendered value and its client
+ * rehydration agree.
  *
- * Locale is pinned to `en-GB` and timezone to UTC deliberately: recruiters,
- * hiring managers and panelists compare dates across a shared queue, so the
- * same record must read identically on every machine.
+ * Locale is pinned to `en-GB` and timezone to UTC deliberately: AI
+ * analysts, developers, and management compare dates across a shared
+ * portfolio, so the same record must read identically on every machine.
  */
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {

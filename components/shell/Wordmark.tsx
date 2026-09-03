@@ -17,7 +17,7 @@ export function Wordmark({ className = "" }: { className?: string }) {
         A
       </span>
       <span className="font-display text-subhead font-semibold tracking-[-0.015em] text-text">
-        Talent<span className="text-accent-ink">Flow</span>
+        Project<span className="text-accent-ink">Flow</span>
       </span>
       <span className="sr-only">— Anwar Group, home</span>
     </Link>

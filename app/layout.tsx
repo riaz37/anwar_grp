@@ -19,11 +19,11 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "TalentFlow — Anwar Group",
-    template: "%s · TalentFlow",
+    default: "Anwar AI ProjectFlow",
+    template: "%s · ProjectFlow",
   },
   description:
-    "Talent acquisition coordination for Anwar Group — one recruiter, one current stage, one next action per application.",
+    "Project governance for Anwar Group's AI and software initiatives — one owner, one current stage, one next action per project.",
 };
 
 export const viewport: Viewport = {

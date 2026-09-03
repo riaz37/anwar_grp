@@ -6,10 +6,9 @@ const SIZES = {
 } as const;
 
 /**
- * Generic status pill. Domain-specific wrappers (e.g. a `ProjectHealthPill`
- * mapping `Health -> tone/label`) compose this rather than duplicating the
- * markup — see ApplicationStage-era StagePill/ApprovalStatusPill (removed
- * with the TalentFlow domain) for the pattern to follow.
+ * Generic status pill. Domain-specific tone/label maps (e.g.
+ * `components/projects/projectTone.ts`'s `HEALTH_TONE`/`STAGE_LABELS`)
+ * compose this rather than duplicating the markup.
  */
 export function Pill({
   tone,
