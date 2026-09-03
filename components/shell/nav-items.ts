@@ -1,6 +1,5 @@
 import type { ComponentType, SVGProps } from "react";
 import {
-  AdministrationIcon,
   HomeIcon,
   ProjectsIcon,
   ReportsIcon,
@@ -17,8 +16,8 @@ export type NavItem = {
 
 /**
  * Primary navigation for Anwar AI ProjectFlow: Home, My Work (role-scoped
- * assignments), Portfolio (all projects), Management Dashboard, and
- * Administration. See DESIGN.md > Layout.
+ * assignments), Portfolio (all projects), and Management Dashboard. See
+ * DESIGN.md > Layout.
  *
  * Role-based visibility filtering happens here once sessions are wired; the
  * client nav is a UX convenience, never the authorization boundary
@@ -29,7 +28,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "My Work", href: "/my-work", icon: TasksIcon, primary: true },
   { label: "Portfolio", href: "/projects", icon: ProjectsIcon, primary: true },
   { label: "Management Dashboard", href: "/dashboard", icon: ReportsIcon },
-  { label: "Administration", href: "/administration", icon: AdministrationIcon },
 ] as const;
 
 export const PRIMARY_NAV_ITEMS = NAV_ITEMS.filter((item) => item.primary);
