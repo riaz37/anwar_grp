@@ -14,7 +14,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="Primary sections"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-outline-low bg-surface-1 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="grid grid-cols-3">
         {PRIMARY_NAV_ITEMS.map((item) => {
@@ -25,13 +25,16 @@ export function MobileTabBar() {
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex min-h-16 flex-col items-center justify-center gap-2xs text-caption font-medium transition-colors duration-100 ease-move ${
-                  active ? "text-accent-ink" : "text-muted"
+                /* Touch has no hover, so `active:` is the only press feedback
+                   available here; without it a tap on a slow route change
+                   looks like it did nothing. */
+                className={`relative flex min-h-16 flex-col items-center justify-center gap-ds-xs text-caption-1 font-medium transition-colors duration-150 ease-move active:bg-outline-base ${
+                  active ? "text-primary-high" : "text-text-low"
                 }`}
               >
                 <span
                   aria-hidden="true"
-                  className={`absolute inset-x-6 top-0 h-[2px] rounded-full bg-accent ${
+                  className={`absolute inset-x-6 top-0 h-[2px] rounded-full bg-primary-med ${
                     active ? "block" : "hidden"
                   }`}
                 />

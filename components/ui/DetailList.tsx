@@ -1,10 +1,18 @@
 import type { ReactNode } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/primitives/card";
+import { cn } from "@/lib/utils";
 
 /**
  * Definition list for record fields. A real `<dl>` rather than a grid of divs,
  * so a screen reader announces "Business unit: Anwar Textiles" as a pair.
  *
- * Columns are set by the caller — detail panels cap at 720px per DESIGN.md >
+ * Columns are set by the caller; detail panels cap at 720px per DESIGN.md >
  * Layout, which comfortably fits two columns of label + value.
  */
 export function DetailList({
@@ -22,14 +30,19 @@ export function DetailList({
         : "sm:grid-cols-2";
 
   return (
-    <dl className={`grid grid-cols-1 gap-x-lg gap-y-md ${grid}`}>{children}</dl>
+    <dl className={cn("grid grid-cols-1 gap-x-ds-xl gap-y-ds-lg", grid)}>{children}</dl>
   );
 }
 
+/**
+ * One label/value pair, drawn the way a technical drawing annotates a
+ * dimension: a hairline leader down the left edge, the label set as small
+ * uppercase caption text above the value it names.
+ */
 export function DetailItem({
   label,
   children,
-  /** Numeric or date values get the tabular data face (DESIGN.md > Typography). */
+  /** Numeric or date values get the mono numeral face (DESIGN.md > Typography). */
   numeric = false,
   span = false,
 }: {
@@ -39,12 +52,18 @@ export function DetailItem({
   span?: boolean;
 }) {
   return (
-    <div className={span ? "sm:col-span-full" : undefined}>
-      <dt className="text-caption font-medium uppercase tracking-[0.06em] text-muted">
-        {label}
-      </dt>
+    <div
+      className={cn(
+        "border-l border-outline-low pl-ds-md",
+        span && "sm:col-span-full",
+      )}
+    >
+      <dt className="annotation">{label}</dt>
       <dd
-        className={`mt-2xs text-body text-text ${numeric ? "font-data tabular-nums" : ""}`}
+        className={cn(
+          "mt-ds-xxs text-pretty text-body-1 text-text-high",
+          numeric && "font-data tabular-nums",
+        )}
       >
         {children}
       </dd>
@@ -52,7 +71,14 @@ export function DetailItem({
   );
 }
 
-/** Titled panel used to group a detail view's sections. */
+/**
+ * Titled panel used to group a detail view's sections.
+ *
+ * Built on shadcn/ui's `Card`, retuned to this app's register: the stock
+ * card's drop shadow is dropped in favour of a hairline, because DESIGN.md
+ * reserves elevation for things that genuinely float. A panel never contains
+ * another panel; nested groupings use a rule and a heading instead.
+ */
 export function Panel({
   title,
   description,
@@ -69,24 +95,36 @@ export function Panel({
   const headingId = id ? `${id}-heading` : undefined;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="rounded-md border border-border bg-surface"
+    <Card
+      asChild
+      className="gap-0 overflow-hidden border-outline-low py-0 shadow-none"
     >
-      <div className="flex flex-wrap items-start justify-between gap-md border-b border-border px-md py-md lg:px-lg">
-        <div className="min-w-0">
-          <h2 id={headingId} className="text-subhead text-text">
-            {title}
-          </h2>
-          {description && (
-            <p className="mt-2xs max-w-[62ch] text-body-sm text-muted">
-              {description}
-            </p>
+      <section aria-labelledby={headingId}>
+        <CardHeader className="flex flex-wrap items-start justify-between gap-ds-md border-b border-outline-low px-ds-md py-ds-md lg:px-ds-lg">
+          <div className="min-w-0 flex-1">
+            <CardTitle asChild>
+              <h2 id={headingId} className="text-balance text-title-1 text-text-high">
+                {title}
+              </h2>
+            </CardTitle>
+            {description && (
+              <CardDescription className="mt-ds-xxs max-w-[62ch] text-pretty text-body-1">
+                {description}
+              </CardDescription>
+            )}
+          </div>
+          {/* `shrink-0` keeps a two-button action group from being squeezed
+              into a stack while the title still has room to wrap. */}
+          {actions && (
+            <div className="flex shrink-0 flex-wrap items-center gap-ds-sm">
+              {actions}
+            </div>
           )}
-        </div>
-        {actions}
-      </div>
-      <div className="px-md py-md lg:px-lg lg:py-lg">{children}</div>
-    </section>
+        </CardHeader>
+        <CardContent className="px-ds-md py-ds-md lg:px-ds-lg lg:py-ds-lg">
+          {children}
+        </CardContent>
+      </section>
+    </Card>
   );
 }

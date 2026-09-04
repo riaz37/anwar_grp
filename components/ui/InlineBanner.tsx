@@ -2,21 +2,30 @@
 
 import type { ReactNode } from "react";
 import { CloseIcon } from "@/components/shell/icons";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/primitives/alert";
+import { Button } from "@/components/ui/primitives/button";
+import { cn } from "@/lib/utils";
 import { TONE_PILL, type Tone } from "./tone";
 
 /**
  * Non-blocking inline message rendered *on the record it concerns* — the
  * treatment BUILD_PLAN.md Sec 5 decision #4 locks in for optimistic-locking
- * conflicts, and reused for the duplicate-candidate warning (spec Sec 4,
- * "Duplicate-candidate warnings").
+ * conflicts, and reused for duplicate-record warnings.
  *
- * Deliberately not a modal: DESIGN.md's calm register plus the decision that
- * a conflict "doesn't block the rest of the UI". The surrounding form stays
+ * Deliberately not a modal: DESIGN.md's calm register plus the decision that a
+ * conflict "doesn't block the rest of the UI". The surrounding form stays
  * interactive while the banner is shown.
  *
+ * Built on shadcn/ui's `Alert`; its `variant` prop is bypassed for the same
+ * reason `StatusPill` bypasses Badge's — `tone.ts` owns semantic colour.
+ *
  * Announcement: callers render this *inside* a persistent `aria-live` region
- * (see `LiveRegion` below) so the message is announced when it arrives rather
- * than when the region mounts.
+ * (`LiveRegion` below) so the message is announced when it arrives rather than
+ * when the region mounts.
  */
 export function InlineBanner({
   tone,
@@ -34,42 +43,55 @@ export function InlineBanner({
   dismissLabel?: string;
 }) {
   return (
-    /* No `role="status"` here: the wrapping `LiveRegion` already owns the
+    /* `role="alert"` is stripped: the wrapping `LiveRegion` already owns the
        announcement, and nesting two live roles double-announces. */
-    <div
-      className={`flex items-start gap-md rounded-md border px-md py-sm ${TONE_PILL[tone]} motion-safe:animate-[fade-in_200ms_var(--ease-enter)]`}
+    <Alert
+      role={undefined}
+      className={cn(
+        "grid-cols-[1fr_auto] items-start gap-ds-md rounded-xl border px-ds-md py-ds-sm",
+        TONE_PILL[tone],
+        "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200",
+      )}
     >
-      <div className="min-w-0 flex-1">
-        <p className="text-body-sm font-semibold">{title}</p>
+      <div className="col-start-1 min-w-0">
+        <AlertTitle className="line-clamp-none text-balance text-body-1 font-semibold">
+          {title}
+        </AlertTitle>
         {children && (
-          <div className="mt-2xs max-w-[68ch] text-body-sm">{children}</div>
+          <AlertDescription className="mt-ds-xxs max-w-[68ch] text-pretty text-body-1 text-current">
+            {children}
+          </AlertDescription>
         )}
         {actions && (
-          <div className="mt-sm flex flex-wrap items-center gap-sm">
+          <div className="mt-ds-sm flex flex-wrap items-center gap-ds-sm">
             {actions}
           </div>
         )}
       </div>
 
       {onDismiss && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onDismiss}
           aria-label={dismissLabel}
-          className="-m-sm inline-flex size-11 shrink-0 items-center justify-center rounded-sm opacity-70 transition-opacity duration-100 ease-move hover:opacity-100"
+          /* Hover lifts to `bg-surface-1` rather than a grey wash: on a tinted
+             banner the base surface reads as a clean cut-out in whichever tone
+             is showing, and needs no colour-mixing to stay legible. */
+          className="col-start-2 -m-ds-sm row-span-full self-start text-current opacity-70 hover:bg-surface-1 hover:opacity-100 active:bg-surface-1"
         >
           <CloseIcon aria-hidden="true" />
-        </button>
+        </Button>
       )}
-    </div>
+    </Alert>
   );
 }
 
 /**
- * Always-mounted polite live region. Keep one of these near the top of any
- * form or record view that can surface a banner, and render the banner into
- * it — mounting the region together with its message means most screen
- * readers never announce it (DESIGN.md > Accessibility).
+ * Always-mounted polite live region. Keep one of these near the top of any form
+ * or record view that can surface a banner, and render the banner into it —
+ * mounting the region together with its message means most screen readers never
+ * announce it (DESIGN.md > Accessibility).
  */
 export function LiveRegion({ children }: { children: ReactNode }) {
   return (

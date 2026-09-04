@@ -1,27 +1,43 @@
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import {
+  Button as Primitive,
+  buttonVariants,
+} from "@/components/ui/primitives/button";
+import { cn } from "@/lib/utils";
 
 /**
- * Three button weights, deliberately: not every action is primary. A view has
- * at most one `primary` — everything else is `secondary` (bordered) or `ghost`
- * (text-only). All share a 44px minimum hit area per DESIGN.md > Accessibility.
+ * Application-facing button.
+ *
+ * The internals are shadcn/ui's Radix-backed `Button` (focus-visible ring,
+ * `asChild` slotting, CVA variants, 44px hit area — see
+ * `primitives/button.tsx`). This module exists only to keep the app's own
+ * vocabulary: three deliberate weights, because not every action is primary. A
+ * view has at most one `primary`; everything else is `secondary` (bordered) or
+ * `ghost` (text-only).
  */
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "destructive"
+  | "link";
 
-const BASE =
-  "inline-flex min-h-11 items-center justify-center gap-xs rounded-sm px-md text-body-sm font-medium " +
-  "transition-colors duration-100 ease-move disabled:cursor-not-allowed disabled:opacity-60";
-
-const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-accent-ink font-semibold text-surface hover:bg-accent-hover",
-  secondary:
-    "border border-border-strong bg-surface text-text hover:bg-surface-sunken",
-  ghost: "text-accent-ink hover:bg-accent-soft",
+/** App weight → shadcn CVA variant. */
+const VARIANT: Record<
+  ButtonVariant,
+  NonNullable<Parameters<typeof buttonVariants>[0]>["variant"]
+> = {
+  primary: "default",
+  secondary: "outline",
+  ghost: "ghost",
+  destructive: "destructive",
+  link: "link",
 };
 
 export function Button({
   variant = "secondary",
-  className = "",
+  className,
   children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -29,20 +45,16 @@ export function Button({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      {...props}
-      className={`${BASE} ${VARIANTS[variant]} ${className}`}
-    >
+    <Primitive type="button" variant={VARIANT[variant]} className={className} {...props}>
       {children}
-    </button>
+    </Primitive>
   );
 }
 
 export function ButtonLink({
   href,
   variant = "secondary",
-  className = "",
+  className,
   children,
 }: {
   href: string;
@@ -50,9 +62,14 @@ export function ButtonLink({
   className?: string;
   children: ReactNode;
 }) {
+  /* `asChild` hands the styling to `next/link` so the anchor keeps real
+     navigation semantics (middle-click, prefetch) instead of a button
+     pretending to be a link. */
   return (
-    <Link href={href} className={`${BASE} ${VARIANTS[variant]} ${className}`}>
-      {children}
-    </Link>
+    <Primitive asChild variant={VARIANT[variant]} className={className}>
+      <Link href={href}>{children}</Link>
+    </Primitive>
   );
 }
+
+export { buttonVariants, cn };

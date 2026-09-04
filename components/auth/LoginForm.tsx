@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
+import { AlertCircle, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/primitives/button";
 
 /**
  * Envelope every `/api/v1/*` route returns (BUILD_PLAN.md Sec 2.4).
@@ -34,15 +37,74 @@ function validate(email: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
   if (!email.trim()) errors.email = "Enter your work email address.";
   else if (!EMAIL_PATTERN.test(email.trim()))
-    errors.email = "That doesn’t look like an email address — check for typos.";
+    errors.email = "That doesn’t look like an email address. Check for typos.";
   if (!password) errors.password = "Enter your password.";
   return errors;
 }
 
-const FIELD_CLASS =
-  "min-h-11 w-full rounded-sm border bg-surface px-sm py-sm text-body text-text " +
-  "transition-colors duration-100 ease-move placeholder:text-muted " +
-  "hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-60";
+/**
+ * Icon-docked field (DESIGN.md > Components: the auth card is the app's most
+ * elevated surface, so its inputs sit on `surface-3` with the inset
+ * `shadow-input-inner` rather than the bare bordered box `primitives/input`
+ * renders for in-page forms). Local to this file on purpose — it is one
+ * screen's shape, not a shared primitive.
+ *
+ * The label stays visible above the box: the docked glyph is a scanning aid,
+ * not a substitute for a name (DESIGN.md > Accessibility).
+ */
+function Field({
+  id,
+  icon: Icon,
+  label,
+  error,
+  trailing,
+  ...inputProps
+}: React.ComponentProps<"input"> & {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  error?: string;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-ds-md">
+      <label
+        htmlFor={id}
+        className="text-caption-2 font-semibold text-text-med"
+      >
+        {label}
+      </label>
+
+      <div
+        data-invalid={error ? true : undefined}
+        className="group flex items-center gap-ds-lg rounded-xl border border-outline-low bg-surface-3 px-ds-2xl shadow-input-inner transition-colors duration-200 ease-move focus-within:border-outline-high focus-within:bg-surface-4 has-[input:disabled]:opacity-60 data-invalid:border-danger-outline"
+      >
+        <Icon
+          aria-hidden="true"
+          className="size-[18px] shrink-0 text-text-low transition-colors duration-200 ease-move group-focus-within:text-primary-med group-data-invalid:text-danger-high"
+        />
+        <input
+          {...inputProps}
+          id={id}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className="min-h-11 min-w-0 flex-1 bg-transparent text-body-2 text-text-high outline-none placeholder:text-text-low disabled:cursor-not-allowed"
+        />
+        {trailing}
+      </div>
+
+      {error && (
+        <p
+          id={`${id}-error`}
+          className="flex items-start gap-ds-sm text-caption-2 text-danger-high motion-safe:animate-[fade-in_200ms_var(--ease-enter)]"
+        >
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -55,6 +117,22 @@ export function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /* Presentation only — never read by validate() or the submit handler. */
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  /** An error that survives the correction reads as "still wrong" — clear the
+   *  field's message the moment the user starts editing it. */
+  function handleFieldChange(field: keyof FieldErrors, value: string) {
+    if (field === "email") setEmail(value);
+    else setPassword(value);
+    setFormError(null);
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +160,7 @@ export function LoginForm() {
         .catch(() => null)) as ApiEnvelope<unknown> | null;
 
       if (response.ok && body?.success) {
-        router.push("/");
+        router.push("/home");
         router.refresh();
         return;
       }
@@ -103,28 +181,32 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-md">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-ds-5xl">
       {/* Live region is always present so the message is announced when it
           arrives, not when the region mounts (DESIGN.md > Accessibility). */}
       <div aria-live="polite" aria-atomic="true">
         {formError && (
           <p
             role="alert"
-            className="rounded-sm border border-error bg-error-soft px-md py-sm text-body-sm text-error-ink motion-safe:animate-[fade-in_200ms_var(--ease-enter)]"
+            className="flex items-start gap-ds-lg rounded-xl border border-danger-outline bg-danger-wash px-ds-2xl py-ds-xl text-para text-danger-high motion-safe:animate-[fade-in_200ms_var(--ease-enter)]"
           >
+            <AlertCircle
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0"
+            />
             {formError}
           </p>
         )}
       </div>
 
-      <div className="flex flex-col gap-2xs">
-        <label htmlFor={emailId} className="text-body-sm font-medium text-text">
-          Work email
-        </label>
-        <input
+      <div className="flex flex-col gap-ds-4xl">
+        <Field
           id={emailId}
+          icon={Mail}
+          label="Work email"
           name="email"
           type="email"
+          placeholder="you@anwargroup.example"
           autoComplete="username"
           inputMode="email"
           autoCapitalize="none"
@@ -132,59 +214,49 @@ export function LoginForm() {
           required
           value={email}
           disabled={submitting}
-          onChange={(event) => setEmail(event.target.value)}
-          aria-invalid={fieldErrors.email ? true : undefined}
-          aria-describedby={fieldErrors.email ? `${emailId}-error` : undefined}
-          className={`${FIELD_CLASS} ${
-            fieldErrors.email ? "border-error" : "border-border"
-          }`}
+          onChange={(event) => handleFieldChange("email", event.target.value)}
+          error={fieldErrors.email}
         />
-        {fieldErrors.email && (
-          <p id={`${emailId}-error`} className="text-body-sm text-error-ink">
-            {fieldErrors.email}
-          </p>
-        )}
-      </div>
 
-      <div className="flex flex-col gap-2xs">
-        <label
-          htmlFor={passwordId}
-          className="text-body-sm font-medium text-text"
-        >
-          Password
-        </label>
-        <input
+        <Field
           id={passwordId}
+          icon={Lock}
+          label="Password"
           name="password"
-          type="password"
+          type={passwordVisible ? "text" : "password"}
           autoComplete="current-password"
           required
           value={password}
           disabled={submitting}
-          onChange={(event) => setPassword(event.target.value)}
-          aria-invalid={fieldErrors.password ? true : undefined}
-          aria-describedby={
-            fieldErrors.password ? `${passwordId}-error` : undefined
+          onChange={(event) => handleFieldChange("password", event.target.value)}
+          error={fieldErrors.password}
+          trailing={
+            <button
+              type="button"
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              aria-label={passwordVisible ? "Hide password" : "Show password"}
+              aria-pressed={passwordVisible}
+              className="-mr-ds-md flex size-8 shrink-0 items-center justify-center rounded-md text-text-low transition-colors duration-100 ease-move hover:text-text-high"
+            >
+              {passwordVisible ? (
+                <EyeOff aria-hidden="true" className="size-[18px]" />
+              ) : (
+                <Eye aria-hidden="true" className="size-[18px]" />
+              )}
+            </button>
           }
-          className={`${FIELD_CLASS} ${
-            fieldErrors.password ? "border-error" : "border-border"
-          }`}
         />
-        {fieldErrors.password && (
-          <p id={`${passwordId}-error`} className="text-body-sm text-error-ink">
-            {fieldErrors.password}
-          </p>
-        )}
       </div>
 
-      <button
+      <Button
         type="submit"
+        size="lg"
         disabled={submitting}
         aria-busy={submitting}
-        className="mt-sm min-h-11 rounded-sm bg-accent-ink px-md text-body-sm font-semibold text-surface transition-colors duration-100 ease-move hover:bg-accent-hover disabled:cursor-progress disabled:opacity-70"
+        className="h-12 w-full text-body-2"
       >
         {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
     </form>
   );
 }

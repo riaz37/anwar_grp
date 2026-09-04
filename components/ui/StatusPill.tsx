@@ -1,13 +1,21 @@
+import { Badge } from "@/components/ui/primitives/badge";
+import { cn } from "@/lib/utils";
 import { TONE_DOT, TONE_PILL, type Tone } from "./tone";
 
 const SIZES = {
-  sm: "px-sm py-[1px] text-caption",
-  md: "px-sm py-2xs text-body-sm",
+  sm: "px-ds-sm py-[1px] text-caption-2",
+  md: "px-ds-sm py-ds-xxs text-body-1",
 } as const;
 
 /**
- * Generic status pill. Domain-specific tone/label maps (e.g.
- * `components/projects/projectTone.ts`'s `HEALTH_TONE`/`STAGE_LABELS`)
+ * Generic status pill, built on shadcn/ui's `Badge`.
+ *
+ * Badge's own `variant` set (default/secondary/destructive/…) is deliberately
+ * bypassed: DESIGN.md > Color reserves semantic colour for *status meaning*,
+ * and the tone→class map in `tone.ts` is the single place that meaning is
+ * declared. Using `variant` here would create a second, parallel palette.
+ *
+ * Domain-specific tone/label maps (e.g. `projectTone.ts`'s `HEALTH_TONE`)
  * compose this rather than duplicating the markup.
  */
 export function Pill({
@@ -22,16 +30,24 @@ export function Pill({
   struck?: boolean;
 }) {
   return (
-    <span
-      className={`inline-flex items-center gap-xs whitespace-nowrap rounded-full border font-medium ${TONE_PILL[tone]} ${SIZES[size]}`}
+    <Badge
+      variant="ghost"
+      className={cn(
+        "gap-ds-xs whitespace-nowrap border font-medium",
+        TONE_PILL[tone],
+        SIZES[size],
+      )}
     >
+      {/* The dot carries the tone at full saturation while the fill stays soft,
+          so the status is still separable for users who can't rely on the
+          background tint alone. */}
       <span
         aria-hidden="true"
-        className={`size-1.5 shrink-0 rounded-full ${TONE_DOT[tone]}`}
+        className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[tone])}
       />
       <span className={struck ? "line-through decoration-1" : undefined}>
         {label}
       </span>
-    </span>
+    </Badge>
   );
 }

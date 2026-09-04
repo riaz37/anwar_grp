@@ -1,11 +1,17 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { ButtonLink } from "@/components/ui/Button";
 import { ArrowLeftIcon } from "./icons";
 
 /**
- * Page-level heading block. Matches the Home dashboard's treatment (title +
- * one-line explanation, rule beneath, actions right-aligned) so every top-level
- * view in the app opens the same way.
+ * Page-level heading block. Every top-level view in the app opens the same
+ * way, which is what makes the shell feel like one drawing rather than a set
+ * of unrelated screens.
+ *
+ * Treatment: a short lime tick sits above the title as the page's
+ * registration mark, the eyebrow is set as a drawing annotation in the mono
+ * numeral face, and the block closes on a hairline rather than a card edge.
+ * The back affordance is a real `ButtonLink` (shadcn `Button` with
+ * `asChild`), so it keeps anchor semantics and the 44px hit area.
  */
 export function PageHeader({
   title,
@@ -18,7 +24,7 @@ export function PageHeader({
 }: {
   title: string;
   description?: string;
-  /** Small label above the title — used for the record reference on details. */
+  /** Small label above the title, used for the record reference on details. */
   eyebrow?: ReactNode;
   backHref?: string;
   backLabel?: string;
@@ -27,39 +33,41 @@ export function PageHeader({
   meta?: ReactNode;
 }) {
   return (
-    <div className="border-b border-border pb-lg">
+    <header className="border-b border-outline-low pb-ds-lg">
       {backHref && (
-        <Link
+        <ButtonLink
           href={backHref}
-          className="-ml-xs mb-sm inline-flex min-h-11 items-center gap-xs rounded-sm pr-sm text-body-sm font-medium text-muted transition-colors duration-100 ease-move hover:text-text"
+          variant="ghost"
+          className="-ml-3 mb-ds-sm text-muted-foreground hover:bg-surface-2 hover:text-text-high"
         >
           <ArrowLeftIcon />
           {backLabel ?? "Back"}
-        </Link>
+        </ButtonLink>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-md">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-end justify-between gap-ds-md">
+        <div className="min-w-0 flex-1">
+          {/* Registration mark. Decorative, and the only accent fill in the
+              header, so the title stays the loudest thing on the page. */}
+          <span aria-hidden className="mb-ds-sm block h-[3px] w-8 bg-primary-med" />
           {eyebrow && (
-            <p className="font-data text-caption font-medium uppercase tracking-[0.08em] tabular-nums text-muted">
-              {eyebrow}
-            </p>
+            <p className="annotation font-data tabular-nums">{eyebrow}</p>
           )}
-          <h1 className="text-title text-text">{title}</h1>
+          <h1 className="text-balance text-display-1 font-semibold text-text-high">{title}</h1>
           {description && (
-            <p className="mt-2xs max-w-[62ch] text-body text-muted">
+            <p className="mt-ds-xs max-w-[62ch] text-pretty text-body-2 text-muted-foreground">
               {description}
             </p>
           )}
         </div>
 
         {(actions || meta) && (
-          <div className="flex flex-wrap items-center gap-md">
+          <div className="flex shrink-0 flex-wrap items-center gap-ds-md">
             {meta}
             {actions}
           </div>
         )}
       </div>
-    </div>
+    </header>
   );
 }

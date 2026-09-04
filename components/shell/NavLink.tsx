@@ -8,22 +8,23 @@ import type { NavItem } from "./nav-items";
  * icon + label at ≥1024px (DESIGN.md > Layout). The label stays in the
  * accessibility tree at every breakpoint via `sr-only`/`not-sr-only`, and the
  * `title` attribute gives sighted tablet users a tooltip.
+ *
+ * Row recipe is DESIGN.md > Sidebar's: 40px row, `rounded-lg`, active state
+ * gets a `primary-wash` fill, `primary-high` label at 600 weight, and
+ * `shadow-e1` for the glossy/tactile lift every filled surface gets.
  */
 type Variant = "rail" | "drawer";
 
 const BASE =
-  "group relative flex min-h-11 items-center gap-sm rounded-sm text-body-sm font-medium " +
-  "transition-colors duration-100 ease-move " +
-  "text-muted hover:bg-surface-sunken hover:text-text " +
-  "aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-ink " +
-  // 3px brass marker on the active item — the only place nav uses accent fill.
-  "before:absolute before:left-0 before:top-1/2 before:hidden before:h-5 before:w-[3px] " +
-  "before:-translate-y-1/2 before:rounded-full before:bg-accent " +
-  "aria-[current=page]:before:block";
+  "group relative flex h-10 items-center gap-ds-lg rounded-lg text-body-1 font-medium outline-none " +
+  "transition-colors duration-150 ease-move " +
+  "text-text-med hover:bg-outline-base hover:text-text-high " +
+  "focus-visible:ring-2 focus-visible:ring-ring/60 " +
+  "aria-[current=page]:bg-primary-wash aria-[current=page]:font-semibold aria-[current=page]:text-primary-high aria-[current=page]:shadow-e1";
 
 const VARIANTS: Record<Variant, string> = {
-  rail: "justify-center px-sm lg:justify-start lg:px-md",
-  drawer: "px-md",
+  rail: "justify-center px-0 lg:justify-start lg:px-ds-lg",
+  drawer: "px-ds-lg",
 };
 
 const LABELS: Record<Variant, string> = {

@@ -8,6 +8,11 @@ import { SideRail } from "./SideRail";
 import { TopBar } from "./TopBar";
 import type { ShellUser } from "./types";
 
+/**
+ * Rail + canvas (DESIGN.md > Sidebar / Top bar): the sidebar owns its own
+ * header and spans the full viewport height; the top bar is scoped to the
+ * canvas column beside it, not the full width.
+ */
 export function AppShell({
   user,
   children,
@@ -38,29 +43,32 @@ export function AppShell({
     <>
       <a
         href="#main"
-        className="sr-only rounded-sm border border-border bg-surface px-md text-body-sm font-medium text-accent-ink focus:not-sr-only focus:absolute focus:left-md focus:top-md focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center"
+        className="sr-only rounded-lg border border-outline-med bg-surface-1 px-ds-lg text-body-1 font-medium text-text-high focus:not-sr-only focus:absolute focus:left-ds-lg focus:top-ds-lg focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center"
       >
         Skip to main content
       </a>
 
-      <TopBar
-        user={user}
-        drawerId={drawerId}
-        drawerOpen={drawerOpen}
-        menuButtonRef={menuButtonRef}
-        onOpenDrawer={() => setDrawerOpen(true)}
-      />
+      <div className="flex h-dvh overflow-hidden bg-surface-shell">
+        <SideRail user={user} />
 
-      <div className="flex flex-1">
-        <SideRail />
-        <main
-          id="main"
-          className="min-w-0 flex-1 pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-2xl"
-        >
-          <div className="mx-auto w-full max-w-[1440px] px-md py-lg lg:px-xl lg:py-xl">
-            {children}
-          </div>
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar
+            user={user}
+            drawerId={drawerId}
+            drawerOpen={drawerOpen}
+            menuButtonRef={menuButtonRef}
+            onOpenDrawer={() => setDrawerOpen(true)}
+          />
+
+          <main
+            id="main"
+            className="min-h-0 flex-1 overflow-y-auto pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0"
+          >
+            <div className="mx-auto w-full max-w-[1440px] px-ds-2xl py-ds-4xl lg:px-ds-9xl lg:py-ds-7xl">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
 
       <NavDrawer

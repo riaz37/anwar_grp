@@ -1,233 +1,362 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* ==========================================================================
-   Anwar TalentFlow — design tokens
-   Encodes DESIGN.md exactly. Do not add palette entries without updating
-   DESIGN.md first (see CLAUDE.md).
+   Anwar AI ProjectFlow — design tokens
+   Ported from agent-builder-frontend's design.md (dark-default, black
+   surfaces + a single lime/yellow-green accent). Dark is the default
+   (:root); light overrides via [data-theme="light"] on <html>, toggled by
+   next-themes (attribute="data-theme").
+
+   See DESIGN.md for the documented system. Do not add palette entries
+   without updating DESIGN.md first (see CLAUDE.md).
    ========================================================================== */
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* --------------------------------------------------------------------------
-   Raw palette — light (DESIGN.md > Color > Neutrals (light) / Semantic)
-   `*-ink` variants are the text-safe darkenings of hues whose display value
-   does not clear 4.5:1 on the light background (accent 3.66:1, warning 3.26:1).
-   -------------------------------------------------------------------------- */
 :root {
-  color-scheme: light;
-
-  --bg: #fafaf8;
-  --surface: #ffffff;
-  --surface-sunken: #f3f2ee;
-  --text: #1a1a1e;
-  --text-muted: #6b6b74;
-  --border: #e4e2dd;
-  --border-strong: #cfccc4;
-
-  --accent: #b5793a;
-  --accent-ink: #8f5a22;
-  --accent-hover: #7d4e1e;
-  --accent-soft: #f5ebdf;
-
-  --success: #2f7d5c;
-  --success-ink: #2f7d5c;
-  --success-soft: #e3f0ea;
-
-  --warning: #b8862f;
-  --warning-ink: #8a6420;
-  --warning-soft: #faf0dc;
-
-  --error: #b23b3b;
-  --error-ink: #b23b3b;
-  --error-soft: #f7e4e4;
-
-  --info: #3d6e96;
-  --info-ink: #3d6e96;
-  --info-soft: #e4edf4;
-
-  --link-visited: #6e4a2a;
-}
-
-/* Dark — surfaces redesigned (not inverted); semantic hues desaturated ~15%
-   and lifted in lightness so each still clears 4.5:1 on #14131A. */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    color-scheme: dark;
-
-    --bg: #14131a;
-    --surface: #1c1b24;
-    --surface-sunken: #100f16;
-    --text: #ededf0;
-    --text-muted: #9a98a3;
-    --border: #2e2c38;
-    --border-strong: #423f4f;
-
-    --accent: #c98d4e;
-    --accent-ink: #d9a263;
-    --accent-hover: #e5b27b;
-    --accent-soft: #2e2318;
-
-    --success: #55a183;
-    --success-ink: #6fb394;
-    --success-soft: #17281f;
-
-    --warning: #c39a4d;
-    --warning-ink: #d8a857;
-    --warning-soft: #2e2617;
-
-    --error: #c66a6a;
-    --error-ink: #de8585;
-    --error-soft: #2e1c1c;
-
-    --info: #6b97bd;
-    --info-ink: #7faad0;
-    --info-soft: #17232e;
-
-    --link-visited: #b79a7d;
-  }
-}
-
-.dark {
   color-scheme: dark;
 
-  --bg: #14131a;
-  --surface: #1c1b24;
-  --surface-sunken: #100f16;
-  --text: #ededf0;
-  --text-muted: #9a98a3;
-  --border: #2e2c38;
-  --border-strong: #423f4f;
+  --surface-shell: #000000;
+  --surface-0: #070707;
+  --surface-1: #111111;
+  --surface-2: #171717;
+  --surface-3: #212121;
+  --surface-4: #2d2d2d;
 
-  --accent: #c98d4e;
-  --accent-ink: #d9a263;
-  --accent-hover: #e5b27b;
-  --accent-soft: #2e2318;
+  --primary-high: #f2fc80;
+  --primary-med: #f0fb67;
+  --primary-wash: #ecfa411f; /* 12% alpha */
+  --primary-onaccent: #63691b;
 
-  --success: #55a183;
-  --success-ink: #6fb394;
-  --success-soft: #17281f;
+  --text-high: #ffffff;
+  --text-med: #ffffffb8; /* ~72% */
+  --text-low: #ffffff7a; /* ~48% */
 
-  --warning: #c39a4d;
-  --warning-ink: #d8a857;
-  --warning-soft: #2e2617;
+  --outline-base: #ffffff08; /* ~3% */
+  --outline-low: #ffffff0f; /* ~6% */
+  --outline-med: #ffffff17; /* ~9% */
+  --outline-high: #ffffff1f; /* ~12% */
 
-  --error: #c66a6a;
-  --error-ink: #de8585;
-  --error-soft: #2e1c1c;
+  --link-visited: #d9b8ff;
 
-  --info: #6b97bd;
-  --info-ink: #7faad0;
-  --info-soft: #17232e;
+  --warn-high: #ffd666;
+  --warn-med: #ffab00;
+  --warn-wash: rgba(255, 171, 0, 0.12);
+  --warn-outline: rgba(255, 171, 0, 0.3);
 
-  --link-visited: #b79a7d;
+  --danger-high: #ffac82;
+  --danger-med: #ff6a2f;
+  --danger-wash: rgba(255, 86, 48, 0.12);
+  --danger-outline: rgba(255, 86, 48, 0.3);
+
+  --info-high: #7dd3fc;
+  --info-med: #38bdf8;
+  --info-wash: rgba(56, 189, 248, 0.12);
+  --info-outline: rgba(56, 189, 248, 0.3);
+
+  --success-high: #9efbcd;
+  --success-med: #13f584;
+  --success-wash: rgba(19, 245, 132, 0.12);
+  --success-outline: rgba(19, 245, 132, 0.3);
+
+  /* Named --elevation-/--btn- (not --shadow-) so @theme's Tailwind-namespaced
+     --shadow-* vars below can reference these without a self-referential
+     var() on the same name. */
+  --elevation-e1: 0 1px 1px -0.5px rgba(0, 0, 0, 0.09);
+  --elevation-e2:
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.09), 0 1px 1px -0.5px rgba(0, 0, 0, 0.09);
+  --elevation-e6:
+    0 64px 64px -32px rgba(0, 0, 0, 0.09), 0 32px 32px -16px rgba(0, 0, 0, 0.09),
+    0 12px 12px -6px rgba(0, 0, 0, 0.09), 0 6px 6px -3px rgba(0, 0, 0, 0.09),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.09), 0 1px 1px -0.5px rgba(0, 0, 0, 0.09);
+  --btn-primary-shadow:
+    inset 0 0 8px -2px rgba(255, 255, 255, 0.48),
+    inset 0 3px 4px -3px rgba(255, 255, 255, 0.56),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.09), 0 1px 1px -0.5px rgba(0, 0, 0, 0.09);
+  --btn-secondary-shadow:
+    inset 0 -1px 3px -2px rgba(255, 255, 255, 0.06),
+    inset 0 1px 3px -2px rgba(255, 255, 255, 0.03),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.09), 0 1px 1px -0.5px rgba(0, 0, 0, 0.09);
+  --input-inner-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+
+  /* shadcn/ui aliases — every vendored primitive reads these bg-/text- names.
+     Point them at the product tokens above so there is one source of color
+     truth; never hand-edit a primitive to fix a color, fix the mapping here. */
+  --background: var(--surface-shell);
+  --foreground: var(--text-high);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-high);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--text-high);
+  --primary: var(--primary-med);
+  --primary-foreground: var(--primary-onaccent);
+  --secondary: var(--surface-3);
+  --secondary-foreground: var(--text-high);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-low);
+  --accent: var(--surface-3);
+  --accent-foreground: var(--text-high);
+  --destructive: var(--danger-med);
+  --destructive-foreground: var(--text-high);
+  --border: var(--outline-low);
+  --input: var(--outline-med);
+  --ring: var(--primary-med);
+  --radius: 12px;
 }
 
-@theme inline {
-  /* Color ------------------------------------------------------------- */
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-sunken: var(--surface-sunken);
-  --color-text: var(--text);
-  --color-muted: var(--text-muted);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
+[data-theme="light"] {
+  color-scheme: light;
 
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-soft: var(--accent-soft);
+  --surface-shell: #ffffff;
+  --surface-0: #ffffff;
+  --surface-1: #f9f9fa;
+  --surface-2: #f4f4f6;
+  --surface-3: #ebecf0;
+  --surface-4: #ebecf0;
 
-  --color-success: var(--success);
-  --color-success-ink: var(--success-ink);
-  --color-success-soft: var(--success-soft);
+  --primary-high: #ecfa41;
+  --primary-med: #f0fb67;
+  --primary-wash: #ecfa4166; /* bumped to 40% for solid contrast on white */
+  --primary-onaccent: #63691b;
 
-  --color-warning: var(--warning);
-  --color-warning-ink: var(--warning-ink);
-  --color-warning-soft: var(--warning-soft);
+  --text-high: #0a0c11;
+  --text-med: #5b616d;
+  --text-low: #767c86; /* darkened from Figma's raw value for WCAG AA */
 
-  --color-error: var(--error);
-  --color-error-ink: var(--error-ink);
-  --color-error-soft: var(--error-soft);
+  --outline-base: #00000008;
+  --outline-low: #0000000f;
+  --outline-med: #00000017;
+  --outline-high: #0000001f;
 
-  --color-info: var(--info);
-  --color-info-ink: var(--info-ink);
-  --color-info-soft: var(--info-soft);
+  --link-visited: #6d3fae;
 
-  /* Typography --------------------------------------------------------- */
-  --font-display: "General Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-data: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  --warn-high: #8a5200;
+  --warn-med: #ffab00;
+  --warn-wash: rgba(255, 171, 0, 0.16);
+  --warn-outline: rgba(255, 171, 0, 0.4);
 
-  --text-caption: 0.75rem; /* 12 — caption / meta */
-  --text-caption--line-height: 1rem;
-  --text-caption--letter-spacing: 0.01em;
-  --text-body-sm: 0.875rem; /* 14 — body-small, table rows */
-  --text-body-sm--line-height: 1.375rem;
-  --text-body: 1rem; /* 16 — body default */
-  --text-body--line-height: 1.5625rem;
-  --text-subhead: 1.125rem; /* 18 — subheading */
-  --text-subhead--line-height: 1.625rem;
-  --text-section: 1.375rem; /* 22 — section heading */
-  --text-section--line-height: 1.875rem;
-  --text-section--letter-spacing: -0.011em;
-  --text-title: 1.75rem; /* 28 — page title */
-  --text-title--line-height: 2.125rem;
-  --text-title--letter-spacing: -0.018em;
-  --text-stat: 2.25rem; /* 36 — dashboard hero stat only */
-  --text-stat--line-height: 2.5rem;
-  --text-stat--letter-spacing: -0.02em;
+  --danger-high: #b71d18;
+  --danger-med: #ff6a2f;
+  --danger-wash: rgba(255, 86, 48, 0.12);
+  --danger-outline: rgba(255, 86, 48, 0.32);
 
-  /* Spacing — 8px base unit ------------------------------------------- */
-  --spacing-2xs: 2px;
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-2xl: 48px;
-  --spacing-3xl: 64px;
+  --info-high: #0b6bcb;
+  --info-med: #38bdf8;
+  --info-wash: rgba(56, 189, 248, 0.16);
+  --info-outline: rgba(56, 189, 248, 0.4);
 
-  /* Radius -------------------------------------------------------------- */
-  --radius-sm: 4px; /* inputs, pills */
-  --radius-md: 8px; /* cards, panels */
-  --radius-lg: 12px; /* modals */
+  --success-high: #0a6c43;
+  --success-med: #13f584;
+  --success-wash: rgba(19, 245, 132, 0.16);
+  --success-outline: rgba(19, 245, 132, 0.4);
 
-  /* Motion — minimal-functional only ------------------------------------ */
-  --ease-enter: cubic-bezier(0.16, 0.84, 0.44, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --elevation-e1: 0 1px 1px -0.5px rgba(0, 0, 0, 0.03);
+  --elevation-e2:
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.03), 0 1px 1px -0.5px rgba(0, 0, 0, 0.03);
+  --elevation-e6:
+    0 64px 64px -32px rgba(0, 0, 0, 0.03), 0 32px 32px -16px rgba(0, 0, 0, 0.03),
+    0 12px 12px -6px rgba(0, 0, 0, 0.03), 0 6px 6px -3px rgba(0, 0, 0, 0.03),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.03), 0 1px 1px -0.5px rgba(0, 0, 0, 0.03);
+  --btn-primary-shadow:
+    inset 0 0 8px -2px rgba(255, 255, 255, 0.48),
+    inset 0 3px 4px -3px rgba(255, 255, 255, 0.56),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.03), 0 1px 1px -0.5px rgba(0, 0, 0, 0.03);
+  --btn-secondary-shadow:
+    inset 0 -1px 3px -2px rgba(255, 255, 255, 0.06),
+    inset 0 1px 3px -2px rgba(255, 255, 255, 0.03),
+    0 3px 3px -1.5px rgba(0, 0, 0, 0.03), 0 1px 1px -0.5px rgba(0, 0, 0, 0.03);
+  --input-inner-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
 
-  /* Layout -------------------------------------------------------------- */
-  --container-shell: 1440px; /* dashboards + tables */
-  --container-form: 720px; /* forms + detail panels */
+  --background: var(--surface-shell);
+  --foreground: var(--text-high);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-high);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--text-high);
+  --primary: var(--primary-med);
+  --primary-foreground: var(--primary-onaccent);
+  --secondary: var(--surface-3);
+  --secondary-foreground: var(--text-high);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-low);
+  --accent: var(--surface-3);
+  --accent-foreground: var(--text-high);
+  --destructive: var(--danger-med);
+  --destructive-foreground: var(--text-high);
+  --border: var(--outline-low);
+  --input: var(--outline-med);
+  --ring: var(--primary-med);
+  --radius: 12px;
 }
 
-/* Duration tokens (DESIGN.md > Motion). Kept as plain custom properties —
-   Tailwind's `duration-*` utilities cover the same bands. */
+/* Plain custom properties: durations, shell metrics. */
 :root {
   --duration-micro: 100ms;
   --duration-short: 200ms;
   --duration-medium: 300ms;
   --duration-long: 500ms;
 
-  --rail-w: 240px;
+  --rail-w: 304px; /* sidebar width, design.md §2.1 */
   --rail-w-compact: 64px;
-  --topbar-h: 56px;
+  --topbar-h: 76px; /* design.md §2.2 */
+}
+
+@theme inline {
+  --color-surface-shell: var(--surface-shell);
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+
+  --color-primary-high: var(--primary-high);
+  --color-primary-med: var(--primary-med);
+  --color-primary-wash: var(--primary-wash);
+  --color-primary-onaccent: var(--primary-onaccent);
+
+  --color-text-high: var(--text-high);
+  --color-text-med: var(--text-med);
+  --color-text-low: var(--text-low);
+
+  --color-outline-base: var(--outline-base);
+  --color-outline-low: var(--outline-low);
+  --color-outline-med: var(--outline-med);
+  --color-outline-high: var(--outline-high);
+
+  --color-link-visited: var(--link-visited);
+
+  /* Status / feedback — a `-wash` background, a `-outline` border and `-high`
+     text form one badge/banner; `-med` is the solid fill for buttons/dots. */
+  --color-warn-high: var(--warn-high);
+  --color-warn-med: var(--warn-med);
+  --color-warn-wash: var(--warn-wash);
+  --color-warn-outline: var(--warn-outline);
+
+  --color-danger-high: var(--danger-high);
+  --color-danger-med: var(--danger-med);
+  --color-danger-wash: var(--danger-wash);
+  --color-danger-outline: var(--danger-outline);
+
+  --color-info-high: var(--info-high);
+  --color-info-med: var(--info-med);
+  --color-info-wash: var(--info-wash);
+  --color-info-outline: var(--info-outline);
+
+  --color-success-high: var(--success-high);
+  --color-success-med: var(--success-med);
+  --color-success-wash: var(--success-wash);
+  --color-success-outline: var(--success-outline);
+
+  /* shadcn/ui utility names — aliases only, values come from the block above. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-data: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* Type scale — design.md §1.5, extended with a page-title/display step the
+     source's dense dashboard scale didn't need. */
+  --text-caption-1: 11px;
+  --text-caption-1--line-height: 16px;
+  --text-caption-2: 12px;
+  --text-caption-2--line-height: 16px;
+  --text-body-1: 13px;
+  --text-body-1--line-height: 24px;
+  --text-body-2: 15px;
+  --text-body-2--line-height: 24px;
+  --text-para: 13px;
+  --text-para--line-height: 20px;
+  --text-title-1: 15px;
+  --text-title-1--line-height: 24px;
+  --text-heading-1: 22px;
+  --text-heading-1--line-height: 32px;
+  --text-heading-2: 26px;
+  --text-heading-2--line-height: 32px;
+  --text-display-1: clamp(26px, 1.2rem + 1.4vw, 34px);
+  --text-display-1--line-height: 1.15;
+  --text-display-1--letter-spacing: -0.02em;
+  --text-metric: clamp(24px, 1.1rem + 1.1vw, 30px);
+  --text-metric--line-height: 1.1;
+  --text-metric--letter-spacing: -0.02em;
+
+  /* Prefixed "ds-" to avoid colliding with Tailwind's built-in spacing keys
+     (sm, md, lg, xl, 2xl…), which are also consumed by max-w/min-w/w/h
+     utilities via the shared spacing namespace. */
+  --spacing-ds-xxs: 2px;
+  --spacing-ds-xs: 4px;
+  --spacing-ds-sm: 6px;
+  --spacing-ds-md: 8px;
+  --spacing-ds-lg: 10px;
+  --spacing-ds-xl: 12px;
+  --spacing-ds-2xl: 16px;
+  --spacing-ds-4xl: 20px;
+  --spacing-ds-5xl: 24px;
+  --spacing-ds-6xl: 28px;
+  --spacing-ds-7xl: 32px;
+  --spacing-ds-9xl: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: var(--radius);
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-5xl: 28px;
+  --radius-pill: 1000px;
+
+  /* Base elevation recipes — values come from the theme-reactive --elevation-
+     and --btn- vars in :root/[data-theme="light"] above, so these stay
+     correct across themes with zero component changes. */
+  --shadow-e1: var(--elevation-e1);
+  --shadow-e2: var(--elevation-e2);
+  --shadow-e6: var(--elevation-e6);
+  --shadow-primary-button: var(--btn-primary-shadow);
+  --shadow-secondary-button: var(--btn-secondary-shadow);
+  --shadow-input-inner: var(--input-inner-shadow);
+
+  --ease-enter: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --container-shell: 1440px;
+  --container-form: 576px; /* design.md §2.4 modal width */
+  --container-page: 1180px;
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    height: 100%;
   }
 
   body {
-    background-color: var(--color-bg);
-    color: var(--color-text);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
     font-family: var(--font-sans);
-    font-size: var(--text-body);
-    line-height: 1.5625;
+    font-size: var(--text-body-1);
+    line-height: 1.5;
     font-synthesis-weight: none;
+    transition:
+      background-color var(--duration-short) ease,
+      color var(--duration-short) ease;
   }
 
   h1,
@@ -238,43 +367,77 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-primary-med);
     outline-offset: 2px;
     border-radius: 2px;
   }
 
   ::selection {
-    background-color: var(--color-accent-soft);
-    color: var(--color-accent-ink);
+    background-color: var(--color-primary-wash);
+    color: var(--color-primary-high);
   }
 
-  /* Numeric-heavy surfaces align on the decimal. */
   table,
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Tailwind's preflight resets <button> cursor to `default`; restore the
+     affordance globally instead of repeating `cursor-pointer` everywhere. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @layer components {
-  /* Inline content links. Scoped to a class so navigation and buttons don't
-     inherit visited styling, while prose links keep the visited/unvisited
-     distinction DESIGN.md requires. */
   .link {
-    color: var(--color-accent-ink);
+    color: var(--color-primary-high);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
   }
   .link:visited {
-    color: var(--link-visited);
+    color: var(--color-link-visited);
   }
   .link:hover {
     text-decoration-thickness: 2px;
   }
+
+  .annotation {
+    font-size: var(--text-caption-1);
+    line-height: 16px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-low);
+  }
+
+  .template-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-low) transparent;
+  }
+  .template-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .template-scroll::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 14px 0;
+  }
+  .template-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-text-low);
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  .template-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-med);
+  }
 }
 
-/* Functional only: used where a message appears in place (inline form error,
-   conflict banner) so the change registers instead of popping silently. */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -286,13 +449,50 @@
   }
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise-in {
+  animation: rise-in var(--duration-long) var(--ease-enter) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* One diagonal hatch, reused wherever a shape means "flagged"/"late" — a
+   pattern rather than a paler fill so the distinction survives greyscale
+   and every kind of colour blindness. Uses currentColor so callers set the
+   hue via a text-* class. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    currentColor 0,
+    currentColor 1px,
+    transparent 1px,
+    transparent 5px
+  );
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .rise-in {
+    animation: none !important;
   }
 }

@@ -4,4 +4,5 @@ export type ShellUser = {
   name: string;
   role: string;
   department: string;
+  canViewManagementDashboard: boolean;
 };

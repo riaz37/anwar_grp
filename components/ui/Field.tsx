@@ -1,9 +1,24 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Input } from "@/components/ui/primitives/input";
+import { Label } from "@/components/ui/primitives/label";
+import { Textarea } from "@/components/ui/primitives/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/primitives/select";
+import { cn } from "@/lib/utils";
 
 /**
- * Form primitives for the requisition/candidate create forms.
+ * Form primitives for the project create/edit forms.
+ *
+ * Controls are shadcn/ui `Input` / `Textarea` / `Label` and Radix `Select`.
+ * The wrapper below is what shadcn's own `Form` would otherwise provide — but
+ * without react-hook-form, which these forms don't use.
  *
  * Every control here is label-first (placeholders are never used as labels),
  * has a ≥44px hit area, wires `aria-invalid`/`aria-describedby` to its error
@@ -11,13 +26,18 @@ import type { ReactNode } from "react";
  * summarising errors elsewhere. Forms cap at 720px per DESIGN.md > Layout.
  */
 
+/**
+ * `disabled` gets a sunken fill as well as reduced opacity: opacity alone on a
+ * white control reads as "this page is still loading", while the recessed
+ * surface reads as "this control is not yours to change" — which is what a
+ * read-only field on a role-scoped record actually means here.
+ */
 const CONTROL =
-  "min-h-11 w-full rounded-sm border bg-surface px-sm py-sm text-body text-text " +
-  "transition-colors duration-100 ease-move placeholder:text-muted " +
-  "hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full px-ds-sm py-ds-sm text-body-2 " +
+  "disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-100";
 
 function controlClass(invalid: boolean, extra = ""): string {
-  return `${CONTROL} ${invalid ? "border-error" : "border-border"} ${extra}`;
+  return cn(CONTROL, invalid && "border-danger-med", extra);
 }
 
 interface FieldShellProps {
@@ -46,25 +66,25 @@ export function Field({
   const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div className="flex flex-col gap-2xs">
-      <label htmlFor={id} className="text-body-sm font-medium text-text">
+    <div className="flex flex-col gap-ds-xxs">
+      <Label htmlFor={id} className="text-body-1 font-medium text-text-high">
         {label}
         {!required && (
-          <span className="ml-xs font-normal text-muted">(optional)</span>
+          <span className="ml-ds-xs font-normal text-muted-foreground">(optional)</span>
         )}
-      </label>
+      </Label>
       {children({ id, describedBy, invalid: Boolean(error) })}
       {/* Hint sits *below* the control, not between label and control: with it
           above, a hinted field and an un-hinted one side by side in the same
           grid row have their inputs at different heights, and the form stops
           reading as a grid (DESIGN.md > Layout: grid-disciplined). */}
       {hint && (
-        <p id={hintId} className="text-caption text-muted">
+        <p id={hintId} className="text-caption-2 text-muted-foreground">
           {hint}
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-body-sm text-error-ink">
+        <p id={errorId} className="text-body-1 text-danger-high">
           {error}
         </p>
       )}
@@ -100,7 +120,7 @@ export function TextInputField({
   return (
     <Field {...field}>
       {({ id, describedBy, invalid }) => (
-        <input
+        <Input
           id={id}
           name={id}
           type={type}
@@ -140,7 +160,7 @@ export function NumberField({
   return (
     <Field {...field}>
       {({ id, describedBy, invalid }) => (
-        <input
+        <Input
           id={id}
           name={id}
           type="number"
@@ -180,26 +200,34 @@ export function SelectField({
   return (
     <Field {...field}>
       {({ id, describedBy, invalid }) => (
-        <select
-          id={id}
-          name={id}
-          value={value}
-          required={field.required}
+        /* Radix Select rather than a native `<select>`: it carries the same
+           focus ring and open/close animation as every other control, and its
+           listbox can be styled; the native OS popup cannot. The empty
+           placeholder option is gone because Radix models "nothing selected"
+           as `value === undefined`, not as an option. */
+        <Select
+          value={value === "" ? undefined : value}
+          onValueChange={onChange}
           disabled={field.disabled}
-          aria-invalid={invalid || undefined}
-          aria-describedby={describedBy}
-          onChange={(event) => onChange(event.target.value)}
-          /* Native select chrome kept on purpose — the OS chevron is the most
-             recognisable affordance and this is a utilitarian ops tool. */
-          className={controlClass(invalid)}
+          required={field.required}
         >
-          <option value="">{placeholder}</option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id={id}
+            name={id}
+            aria-invalid={invalid || undefined}
+            aria-describedby={describedBy}
+            className={controlClass(invalid)}
+          >
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
     </Field>
   );
@@ -218,7 +246,7 @@ export function TextAreaField({
   return (
     <Field {...field}>
       {({ id, describedBy, invalid }) => (
-        <textarea
+        <Textarea
           id={id}
           name={id}
           rows={rows}

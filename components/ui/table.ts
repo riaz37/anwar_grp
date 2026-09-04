@@ -11,8 +11,8 @@
 
 /** Column header cell: dense, uppercase caption, bottom-aligned. */
 export const TH_BASE =
-  "whitespace-nowrap px-xs py-sm text-left align-bottom text-caption font-medium sm:px-sm md:px-md " +
-  "uppercase tracking-[0.06em] text-muted";
+  "whitespace-nowrap px-ds-xs py-ds-sm text-left align-bottom text-caption-2 font-medium sm:px-ds-sm md:px-ds-md " +
+  "uppercase tracking-[0.08em] text-muted-foreground";
 
 /** Body cell: comfortable density per DESIGN.md, top-aligned for wrapping rows. */
-export const TD_BASE = "px-xs py-sm align-top text-body-sm sm:px-sm md:px-md";
+export const TD_BASE = "px-ds-xs py-ds-sm align-top text-body-1 sm:px-ds-sm md:px-ds-md";

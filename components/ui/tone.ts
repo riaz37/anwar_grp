@@ -15,28 +15,28 @@ export type Tone = "neutral" | "accent" | "info" | "warning" | "success" | "erro
 
 /** Pill surface: soft fill + ink text + a full-saturation dot marker. */
 export const TONE_PILL: Record<Tone, string> = {
-  neutral: "border-border bg-surface-sunken text-muted",
-  accent: "border-accent-soft bg-accent-soft text-accent-ink",
-  info: "border-info-soft bg-info-soft text-info-ink",
-  warning: "border-warning-soft bg-warning-soft text-warning-ink",
-  success: "border-success-soft bg-success-soft text-success-ink",
-  error: "border-error-soft bg-error-soft text-error-ink",
+  neutral: "border-outline-low bg-surface-2 text-muted-foreground",
+  accent: "border-primary-wash bg-primary-wash text-primary-high",
+  info: "border-info-outline bg-info-wash text-info-high",
+  warning: "border-warn-outline bg-warn-wash text-warn-high",
+  success: "border-success-outline bg-success-wash text-success-high",
+  error: "border-danger-outline bg-danger-wash text-danger-high",
 };
 
 export const TONE_DOT: Record<Tone, string> = {
-  neutral: "bg-border-strong",
-  accent: "bg-accent",
-  info: "bg-info",
-  warning: "bg-warning",
-  success: "bg-success",
-  error: "bg-error",
+  neutral: "bg-text-low",
+  accent: "bg-primary-med",
+  info: "bg-info-med",
+  warning: "bg-warn-med",
+  success: "bg-success-med",
+  error: "bg-danger-med",
 };
 
 export const TONE_TEXT: Record<Tone, string> = {
-  neutral: "text-muted",
-  accent: "text-accent-ink",
-  info: "text-info-ink",
-  warning: "text-warning-ink",
-  success: "text-success-ink",
-  error: "text-error-ink",
+  neutral: "text-muted-foreground",
+  accent: "text-primary-high",
+  info: "text-info-high",
+  warning: "text-warn-high",
+  success: "text-success-high",
+  error: "text-danger-high",
 };

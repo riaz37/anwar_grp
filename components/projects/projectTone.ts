@@ -60,6 +60,16 @@ export const HEALTH_LABELS: Record<ProjectHealth, string> = {
   BLOCKED: "Blocked",
 };
 
+/** Solid-fill class per health state, for the OutcomeBand graphic — a
+ *  distinct scale from `HEALTH_TONE` (which styles a `Pill`'s wash/outline
+ *  pair), since a proportional band needs an opaque fill to read at 8px tall. */
+export const HEALTH_BAND_CLASS: Record<ProjectHealth, string> = {
+  ON_TRACK: "bg-success-med",
+  AT_RISK: "bg-warn-med",
+  DELAYED: "bg-danger-med",
+  BLOCKED: "bg-outline-high",
+};
+
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   PENDING: "Pending",
   IN_PROGRESS: "In progress",

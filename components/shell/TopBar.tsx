@@ -1,20 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { type RefObject, useState } from "react";
-import { MenuIcon, SignOutIcon } from "./icons";
-import type { ShellUser } from "./types";
+import { usePathname } from "next/navigation";
+import type { RefObject } from "react";
+import { MenuIcon } from "./icons";
+import { isActiveHref, visibleNavItems } from "./nav-items";
 import { Wordmark } from "./Wordmark";
+import type { ShellUser } from "./types";
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
+/**
+ * Scoped to the canvas column, not the full viewport width — the sidebar
+ * carries its own header (DESIGN.md > Sidebar), so this bar's only job is
+ * "where you are" (breadcrumb/page title) plus the mobile menu trigger.
+ * 76px height, `outline-med` bottom hairline (DESIGN.md > Top bar).
+ */
 export function TopBar({
   user,
   onOpenDrawer,
@@ -28,65 +26,47 @@ export function TopBar({
   drawerOpen: boolean;
   menuButtonRef: RefObject<HTMLButtonElement | null>;
 }) {
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    try {
-      await fetch("/api/v1/auth/logout", { method: "POST" });
-    } catch {
-      // Network failure still ends the client session — the server-side
-      // cookie is cleared on the next authenticated request either way.
-    }
-    router.push("/login");
-    router.refresh();
-  }
+  const pathname = usePathname();
+  const activeItem = visibleNavItems(user.canViewManagementDashboard).find(
+    (item) => isActiveHref(pathname, item.href),
+  );
 
   return (
-    <header className="sticky top-0 z-30 h-14 border-b border-border bg-surface">
-      <div className="flex h-full items-center gap-sm px-md lg:px-lg">
-        <button
-          ref={menuButtonRef}
-          type="button"
-          onClick={onOpenDrawer}
-          aria-controls={drawerId}
-          aria-expanded={drawerOpen}
-          className="-ml-sm grid size-11 shrink-0 place-items-center rounded-sm text-muted transition-colors duration-100 ease-move hover:bg-surface-sunken hover:text-text md:hidden"
-        >
-          <MenuIcon />
-          <span className="sr-only">Open navigation</span>
-        </button>
+    <header className="sticky top-0 z-30 flex h-[76px] shrink-0 items-center gap-ds-2xl border-b border-outline-med bg-surface-shell px-ds-2xl lg:px-ds-5xl">
+      <button
+        ref={menuButtonRef}
+        type="button"
+        onClick={onOpenDrawer}
+        aria-controls={drawerId}
+        aria-expanded={drawerOpen}
+        className="-ml-ds-md grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg text-text-med outline-none transition-colors duration-150 ease-move hover:bg-outline-base hover:text-text-high focus-visible:ring-2 focus-visible:ring-ring/60 md:hidden"
+      >
+        <MenuIcon />
+        <span className="sr-only">Open navigation</span>
+      </button>
 
-        <Wordmark className="mr-auto" />
+      <Wordmark className="md:hidden" labelClassName="truncate" />
 
-        <div className="flex items-center gap-sm">
-          <div className="hidden text-right leading-tight sm:block">
-            <p className="text-body-sm font-medium text-text">{user.name}</p>
-            <p className="text-caption text-muted">
-              {user.role} · {user.department}
-            </p>
-          </div>
-          <span
-            aria-hidden="true"
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-border bg-surface-sunken font-data text-caption font-medium text-muted"
-          >
-            {initials(user.name)}
-          </span>
-
-          <button
-            type="button"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="ml-2xs flex min-h-11 items-center gap-2xs rounded-sm px-sm text-body-sm font-medium text-muted transition-colors duration-100 ease-move hover:bg-surface-sunken hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <SignOutIcon />
-            <span className="sr-only lg:not-sr-only">
-              {signingOut ? "Signing out…" : "Sign out"}
-            </span>
-          </button>
-        </div>
-      </div>
+      <nav aria-label="Breadcrumb" className="hidden min-w-0 md:block">
+        <ol className="flex min-w-0 items-center gap-ds-md">
+          <li className="truncate text-caption-1 uppercase tracking-[0.08em] text-text-low">
+            ProjectFlow
+          </li>
+          {activeItem && (
+            <>
+              <li aria-hidden="true" className="text-text-low/60">
+                /
+              </li>
+              <li
+                aria-current="page"
+                className="truncate text-title-1 font-semibold text-text-high"
+              >
+                {activeItem.label}
+              </li>
+            </>
+          )}
+        </ol>
+      </nav>
     </header>
   );
 }

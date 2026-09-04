@@ -1,19 +1,30 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
-import { CloseIcon } from "./icons";
+import { Avatar, AvatarFallback } from "@/components/ui/primitives/avatar";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/primitives/sheet";
+import { LogoutButton } from "./LogoutButton";
 import { NavLink } from "./NavLink";
-import { isActiveHref, NAV_ITEMS } from "./nav-items";
+import { ThemeToggle } from "./ThemeToggle";
+import { Wordmark } from "./Wordmark";
+import { initials } from "./utils";
+import { isActiveHref, visibleNavItems } from "./nav-items";
 import type { ShellUser } from "./types";
 
 /**
- * Mobile slide-out navigation carrying all nine items (the bottom bar only
- * surfaces three). Stays mounted so the exit transition can run; `inert` keeps
- * it out of the tab order and the accessibility tree while closed.
+ * Mobile slide-out navigation carrying every nav item and the same bottom
+ * block (profile, theme, sign-out) the desktop rail's footer has — the rail
+ * itself is hidden below 768px, so this is the only place those controls are
+ * reachable on a phone.
  *
- * Motion: 300ms enter / 225ms exit (75% of enter, per DESIGN.md > Motion,
- * "medium 250–400ms — panel/drawer open").
+ * Built on shadcn/ui's `Sheet` — i.e. Radix Dialog. Radix owns the focus trap,
+ * the Escape handler, body scroll-lock, `aria-modal`, marking the rest of the
+ * page inert, and restoring focus to the menu button on close.
  */
 export function NavDrawer({
   id,
@@ -27,91 +38,56 @@ export function NavDrawer({
   user: ShellUser;
 }) {
   const pathname = usePathname();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    closeButtonRef.current?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open, onClose]);
 
   return (
-    <div
-      id={id}
-      inert={!open}
-      className={`fixed inset-0 z-40 md:hidden ${open ? "" : "pointer-events-none"}`}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-hidden="true"
-        onClick={onClose}
-        className={`absolute inset-0 bg-[#14131a]/45 transition-opacity ease-exit ${
-          open ? "opacity-100 duration-300 ease-enter" : "opacity-0 duration-200"
-        }`}
-      />
-
-      <div
-        role="dialog"
-        aria-modal="true"
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
+      <SheetContent
+        id={id}
+        side="left"
         aria-label="Navigation"
-        className={`absolute inset-y-0 left-0 flex w-70 max-w-[85vw] flex-col border-r border-border bg-surface transition-transform ease-exit ${
-          open
-            ? "translate-x-0 duration-300 ease-enter"
-            : "-translate-x-full duration-200"
-        }`}
+        className="w-[272px] max-w-[85vw] gap-0 border-outline-low bg-surface-1 p-0 data-[state=closed]:duration-[240ms] data-[state=open]:duration-[320ms] md:hidden [&>button]:size-9 [&>button]:top-3.5 [&>button]:right-3.5 [&>button]:grid [&>button]:place-items-center [&>button]:rounded-lg [&>button]:text-text-med [&>button]:hover:bg-outline-base [&>button]:hover:text-text-high"
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border pl-md pr-sm">
-          <p className="font-display text-subhead font-semibold">Navigation</p>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            className="grid size-11 place-items-center rounded-sm text-muted transition-colors duration-100 ease-move hover:bg-surface-sunken hover:text-text"
-          >
-            <CloseIcon />
-            <span className="sr-only">Close navigation</span>
-          </button>
-        </div>
+        <SheetHeader className="h-[76px] shrink-0 flex-row items-center border-b border-outline-low p-0 px-ds-2xl">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <Wordmark />
+        </SheetHeader>
 
         <nav
           aria-label="All sections"
-          className="flex-1 overflow-y-auto px-sm py-md"
+          className="flex flex-1 flex-col gap-ds-xxs overflow-y-auto px-ds-2xl py-ds-2xl"
         >
-          <ul className="flex flex-col gap-2xs">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
-                <NavLink
-                  item={item}
-                  active={isActiveHref(pathname, item.href)}
-                  variant="drawer"
-                  onNavigate={onClose}
-                />
-              </li>
-            ))}
-          </ul>
+          {visibleNavItems(user.canViewManagementDashboard).map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              active={isActiveHref(pathname, item.href)}
+              variant="drawer"
+              onNavigate={onClose}
+            />
+          ))}
         </nav>
 
-        <div className="shrink-0 border-t border-border px-md py-md pb-[calc(16px+env(safe-area-inset-bottom))]">
-          <p className="text-body-sm font-medium text-text">{user.name}</p>
-          <p className="text-caption text-muted">
-            {user.role} · {user.department}
-          </p>
+        <div className="flex shrink-0 flex-col gap-ds-xs border-t border-outline-low px-ds-2xl py-ds-lg pb-[calc(16px+env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-ds-lg rounded-lg px-ds-lg py-ds-md">
+            <Avatar size="sm" className="shrink-0">
+              <AvatarFallback className="bg-gradient-to-br from-primary-med to-primary-high font-semibold text-primary-onaccent">
+                {initials(user.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-body-1 font-medium text-text-high">
+                {user.name}
+              </p>
+              <p className="truncate text-caption-1 text-text-low">
+                {user.role} · {user.department}
+              </p>
+            </div>
+          </div>
+
+          <ThemeToggle />
+          <LogoutButton />
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

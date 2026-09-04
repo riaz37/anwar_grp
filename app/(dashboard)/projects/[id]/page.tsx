@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { computeChecklistReadiness } from "@/lib/checklist-engine";
 import { isMilestoneAtRisk, isMilestoneOverdue } from "@/lib/project-health";
-import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
+import { ProjectDetailView } from "@/components/projects/detail/ProjectDetailView";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,10 @@ export default async function ProjectWorkspacePage({
 }) {
   const { id } = await params;
   const session = await getSession();
-  if (!session) notFound();
+  // A signed-out visitor belongs at the sign-in screen, not on a 404 — the
+  // page exists, they just can't see it yet. (The `(dashboard)` layout already
+  // redirects; this keeps the page correct if it is ever rendered elsewhere.)
+  if (!session) redirect("/login");
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -113,7 +116,7 @@ export default async function ProjectWorkspacePage({
   const latestUpdate = candidateEvents[0] ?? null;
 
   return (
-    <ProjectWorkspace
+    <ProjectDetailView
       currentUserRole={session.role}
       project={{
         id: project.id,

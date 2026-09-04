@@ -32,12 +32,16 @@ export default async function NewProjectPage() {
     <>
       <PageHeader
         title="Create project"
-        description="Register a new AI or software initiative. It starts at Idea — discovery, design, and delivery follow the gated stage pipeline."
+        description="Register a new AI or software initiative. It starts at Idea; discovery, design, and delivery follow the gated stage pipeline."
+        eyebrow="Portfolio / New record"
         backHref="/projects"
         backLabel="Back to portfolio"
       />
 
-      <div className="mt-lg max-w-[720px]">
+      {/* The form owns its own two-column split (fields + live rail), so the
+          page only sets the outer measure. Wider than `max-w-form` on purpose:
+          that cap is the modal width, and the rail lives outside the fields. */}
+      <div className="mt-ds-9xl max-w-[64rem] pb-ds-9xl">
         <ProjectCreateForm
           businessUnits={businessUnits}
           departments={departments}
