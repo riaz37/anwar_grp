@@ -28,6 +28,17 @@ export const PROJECT_PERMISSIONS = {
 
 export type ProjectPermission = keyof typeof PROJECT_PERMISSIONS;
 
+/**
+ * Roles with unrestricted portfolio read/write reach (assignment Sec 9:
+ * AI_TEAM_LEAD "View all projects", MANAGEMENT "View portfolio status").
+ * Every other role is scoped to projects they participate in — see
+ * `isProjectParticipant`/`requireProjectParticipant` in project-authz.ts.
+ */
+export const PORTFOLIO_WIDE_ROLES: ReadonlySet<Role> = new Set([
+  "AI_TEAM_LEAD",
+  "MANAGEMENT",
+]);
+
 export function hasProjectPermission(
   role: Role,
   permission: ProjectPermission,

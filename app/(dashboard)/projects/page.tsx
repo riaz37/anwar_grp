@@ -1,8 +1,11 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import type { Prisma } from "@prisma/client";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { hasProjectPermission } from "@/lib/project-authz";
+import { PORTFOLIO_WIDE_ROLES } from "@/lib/project-permissions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ButtonLink } from "@/components/ui/Button";
 import { PlusIcon } from "@/components/ui/icons";
@@ -19,8 +22,26 @@ const ATTENTION_HEALTH = new Set(["DELAYED", "BLOCKED", "AT_RISK"]);
 
 export default async function ProjectsPage() {
   const session = await getSession();
+  if (!session) redirect("/login");
+
+  // Scoped to participants unless the role is portfolio-wide — mirrors
+  // GET /api/v1/projects (assignment Sec 9: "Developer: View assigned
+  // projects" vs. AI_TEAM_LEAD/MANAGEMENT "View all projects").
+  const where: Prisma.ProjectWhereInput = PORTFOLIO_WIDE_ROLES.has(session.role)
+    ? {}
+    : {
+        OR: [
+          { ownerId: session.userId },
+          { analystId: session.userId },
+          { developerId: session.userId },
+          ...(session.role === "BUSINESS_OWNER" && session.departmentId
+            ? [{ departmentId: session.departmentId }]
+            : []),
+        ],
+      };
 
   const projects = await prisma.project.findMany({
+    where,
     orderBy: { updatedAt: "desc" },
     include: {
       owner: { select: { id: true, name: true } },

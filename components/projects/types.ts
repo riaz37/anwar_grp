@@ -71,6 +71,9 @@ export interface BlockerView {
   description: string;
   impact: string;
   requiredAction: string | null;
+  responsiblePersonId: string;
+  responsiblePersonName: string;
+  dateIdentified: string;
   raisedByName: string;
   createdAt: string;
   resolvedAt: string | null;

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DelayReasonCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -20,6 +20,7 @@ export async function POST(
     const user = await requireAuth();
     requireProjectPermission(user, "RECORD_DELAY_REASON");
     const { id, milestoneId } = await params;
+    await requireProjectParticipant(user, id);
     const body = delayReasonSchema.parse(await req.json());
 
     const milestone = await prisma.milestone.findUnique({

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { recomputeProjectHealth } from "@/lib/project-health";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
@@ -11,6 +11,8 @@ const updateBlockerSchema = z.object({
   description: z.string().trim().min(1).optional(),
   impact: z.string().trim().min(1).optional(),
   requiredAction: z.string().trim().max(2000).optional(),
+  responsiblePersonId: z.string().min(1).optional(),
+  dateIdentified: z.coerce.date().optional(),
   resolve: z.boolean().optional(),
   resolutionNotes: z.string().trim().max(2000).optional(),
 });
@@ -22,6 +24,7 @@ export async function PATCH(
   try {
     const user = await requireAuth();
     const { id, blockerId } = await params;
+    await requireProjectParticipant(user, id);
     const body = updateBlockerSchema.parse(await req.json());
 
     const blocker = await prisma.blocker.findUnique({ where: { id: blockerId } });
@@ -45,6 +48,14 @@ export async function PATCH(
       auditAction = "blocker.resolve";
     } else {
       requireProjectPermission(user, "RECORD_BLOCKER");
+      if (body.responsiblePersonId) {
+        const responsiblePerson = await prisma.user.findUnique({
+          where: { id: body.responsiblePersonId },
+        });
+        if (!responsiblePerson) {
+          return fail("NOT_FOUND", "Responsible person not found.", 404);
+        }
+      }
       updated = await prisma.blocker.update({
         where: { id: blockerId },
         data: {
@@ -52,6 +63,12 @@ export async function PATCH(
           ...(body.impact !== undefined && { impact: body.impact }),
           ...(body.requiredAction !== undefined && {
             requiredAction: body.requiredAction,
+          }),
+          ...(body.responsiblePersonId !== undefined && {
+            responsiblePersonId: body.responsiblePersonId,
+          }),
+          ...(body.dateIdentified !== undefined && {
+            dateIdentified: body.dateIdentified,
           }),
         },
       });

@@ -1,6 +1,7 @@
 import type { ProjectStage } from "@prisma/client";
 import { STAGE_LABELS } from "@/components/projects/projectTone";
 import { PanelEmpty } from "./Panel";
+import { BarRow } from "./BarRow";
 
 export type StageCount = { stage: ProjectStage; count: number };
 
@@ -9,9 +10,9 @@ export type StageCount = { stage: ProjectStage; count: number };
  *
  * Ordered by stage, never by size: the shape of the pipeline is the
  * information — a bulge at Approval means something different from the same
- * bulge at Development. Bars are neutral by default and the heaviest stage is
- * the only one set at full ink, so the eye finds the bottleneck without the
- * row order changing under it week to week.
+ * bulge at Development. Every stage keeps its track even at zero, so the gaps
+ * in the pipeline are as visible as the pile-ups, and the fullest stage is the
+ * only one at solid accent so the bottleneck is found before a label is read.
  */
 export function StageBreakdown({ stages }: { stages: readonly StageCount[] }) {
   const max = Math.max(...stages.map((s) => s.count), 0);
@@ -26,38 +27,17 @@ export function StageBreakdown({ stages }: { stages: readonly StageCount[] }) {
   }
 
   return (
-    <ol className="flex flex-col gap-ds-xl">
-      {stages.map((s) => {
-        const leading = s.count === max;
-        return (
-          <li key={s.stage} className="flex items-center gap-ds-2xl">
-            <span className="w-[13ch] shrink-0 truncate text-body-1 text-text-med sm:w-[19ch]">
-              {STAGE_LABELS[s.stage]}
-            </span>
-            <span
-              aria-hidden="true"
-              className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-pill bg-surface-2"
-            >
-              <span
-                className={`block h-full rounded-pill ${leading ? "bg-text-high" : "bg-text-low"}`}
-                style={{
-                  width:
-                    s.count === 0
-                      ? "0%"
-                      : `${Math.max(3, (s.count / max) * 100)}%`,
-                }}
-              />
-            </span>
-            <span
-              className={`w-6 shrink-0 text-right font-data text-body-1 tabular-nums ${
-                leading ? "font-semibold text-text-high" : "text-text-med"
-              }`}
-            >
-              {s.count}
-            </span>
-          </li>
-        );
-      })}
+    <ol className="flex flex-col gap-ds-md">
+      {stages.map((s) => (
+        <BarRow
+          key={s.stage}
+          label={STAGE_LABELS[s.stage]}
+          value={s.count}
+          max={max}
+          leading={s.count === max}
+          labelWidth="w-[12ch] sm:w-[20ch]"
+        />
+      ))}
     </ol>
   );
 }

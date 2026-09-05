@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -23,6 +23,7 @@ export async function PATCH(
     const user = await requireAuth();
     requireProjectPermission(user, "UPDATE_TASK");
     const { id, taskId } = await params;
+    await requireProjectParticipant(user, id);
     const body = updateTaskSchema.parse(await req.json());
 
     const task = await prisma.projectTask.findUnique({ where: { id: taskId } });

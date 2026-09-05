@@ -208,6 +208,7 @@ export function ProjectDetailView({
             <BlockersSection
               projectId={project.id}
               blockers={blockers}
+              users={users}
               currentUserRole={currentUserRole}
               onChanged={refresh}
             />

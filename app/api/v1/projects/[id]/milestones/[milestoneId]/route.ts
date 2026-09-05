@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MilestoneStatus, DelayReasonCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { recomputeProjectHealth, milestoneRequiresDelayReason } from "@/lib/project-health";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
@@ -25,6 +25,7 @@ export async function PATCH(
     const user = await requireAuth();
     requireProjectPermission(user, "MANAGE_MILESTONES");
     const { id, milestoneId } = await params;
+    await requireProjectParticipant(user, id);
     const body = updateMilestoneSchema.parse(await req.json());
 
     const milestone = await prisma.milestone.findUnique({

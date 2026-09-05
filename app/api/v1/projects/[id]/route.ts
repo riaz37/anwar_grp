@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -13,8 +13,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const { id } = await params;
+    await requireProjectParticipant(user, id);
 
     const project = await prisma.project.findUnique({
       where: { id },
@@ -64,13 +65,41 @@ export async function PATCH(
 ) {
   try {
     const user = await requireAuth();
-    requireProjectPermission(user, "EDIT_REQUIREMENTS");
     const { id } = await params;
     const body = updateProjectSchema.parse(await req.json());
+
+    // Reassigning the owner/analyst/developer is "Assign resources" per
+    // assignment Sec 9 — AI_TEAM_LEAD only, distinct from EDIT_REQUIREMENTS
+    // (AI_ANALYST + AI_TEAM_LEAD), which covers the project's content
+    // fields (name/businessProblem/expectedOutcome/expectedDeliveryDate).
+    // A request can only touch one family at a time in the current UI, but
+    // check both permissions independently so a mixed payload can't use
+    // the weaker one to slip past the stronger one.
+    const isPeopleChange =
+      body.ownerId !== undefined ||
+      body.analystId !== undefined ||
+      body.developerId !== undefined;
+    const isContentChange =
+      body.name !== undefined ||
+      body.businessProblem !== undefined ||
+      body.expectedOutcome !== undefined ||
+      body.expectedDeliveryDate !== undefined;
+    if (isPeopleChange) {
+      requireProjectPermission(user, "ASSIGN_RESOURCES");
+    }
+    if (isContentChange) {
+      requireProjectPermission(user, "EDIT_REQUIREMENTS");
+    }
 
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) {
       return fail("NOT_FOUND", "Project not found.", 404);
+    }
+    // EDIT_REQUIREMENTS includes AI_ANALYST, which is participant-scoped;
+    // ASSIGN_RESOURCES is AI_TEAM_LEAD-only (always portfolio-wide), so
+    // no participant check is needed for the people-change branch.
+    if (isContentChange) {
+      await requireProjectParticipant(user, id);
     }
     if (project.version !== body.version) {
       return fail(

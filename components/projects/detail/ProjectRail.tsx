@@ -38,7 +38,10 @@ export function ProjectRail({
   openBlockerCount: number;
   onChanged: () => void;
 }) {
-  const canEdit = hasProjectPermission(currentUserRole, "EDIT_REQUIREMENTS");
+  // Reassigning owner/analyst/developer is "Assign resources" (Sec 9),
+  // AI_TEAM_LEAD only — distinct from EDIT_REQUIREMENTS, which this panel
+  // does not otherwise use (see app/api/v1/projects/[id]/route.ts PATCH).
+  const canEdit = hasProjectPermission(currentUserRole, "ASSIGN_RESOURCES");
 
   const [editing, setEditing] = useState(false);
   const [ownerId, setOwnerId] = useState(project.owner.id);

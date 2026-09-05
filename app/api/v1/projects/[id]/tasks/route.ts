@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
-import { requireProjectPermission } from "@/lib/project-authz";
+import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -21,6 +21,7 @@ export async function POST(
     const user = await requireAuth();
     requireProjectPermission(user, "UPDATE_TASK");
     const { id } = await params;
+    await requireProjectParticipant(user, id);
     const body = createTaskSchema.parse(await req.json());
 
     const project = await prisma.project.findUnique({ where: { id } });
@@ -71,8 +72,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const { id } = await params;
+    await requireProjectParticipant(user, id);
 
     const tasks = await prisma.projectTask.findMany({
       where: { projectId: id },

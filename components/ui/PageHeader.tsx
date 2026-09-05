@@ -7,8 +7,7 @@ import { ArrowLeftIcon } from "./icons";
  * way, which is what makes the shell feel like one drawing rather than a set
  * of unrelated screens.
  *
- * Treatment: a short lime tick sits above the title as the page's
- * registration mark, the eyebrow is set as a drawing annotation in the mono
+ * Treatment: the eyebrow is set as a drawing annotation in the mono
  * numeral face, and the block closes on a hairline rather than a card edge.
  * The back affordance is a real `ButtonLink` (shadcn `Button` with
  * `asChild`), so it keeps anchor semantics and the 44px hit area.
@@ -47,9 +46,6 @@ export function PageHeader({
 
       <div className="flex flex-wrap items-end justify-between gap-ds-md">
         <div className="min-w-0 flex-1">
-          {/* Registration mark. Decorative, and the only accent fill in the
-              header, so the title stays the loudest thing on the page. */}
-          <span aria-hidden className="mb-ds-sm block h-[3px] w-8 bg-primary-med" />
           {eyebrow && (
             <p className="annotation font-data tabular-nums">{eyebrow}</p>
           )}

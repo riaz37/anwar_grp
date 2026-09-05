@@ -76,22 +76,20 @@ export function PortfolioBrowser({
       />
 
       <div>
-        {/* The result count is the only signal that a filter did what you
-            expected, so it is announced rather than left purely visual. */}
-        <div className="mb-ds-md flex flex-wrap items-center gap-ds-md">
-          <p aria-live="polite" className="text-caption-2 text-text-low">
-            <span className="font-data tabular-nums text-text-high">
-              {rows.length}
-            </span>
-            {rows.length === 1 ? " project" : " projects"}
-            {filtered && (
-              <>
-                {" of "}
-                <span className="font-data tabular-nums">{projects.length}</span>
-              </>
-            )}
-          </p>
-          {filtered && (
+        {/* The result count only earns its place once a filter changes what's
+            shown — with no filter active it would just repeat the page
+            header's total, so it stays hidden until there's new information
+            to announce. */}
+        {filtered && (
+          <div className="mb-ds-md flex flex-wrap items-center gap-ds-md">
+            <p aria-live="polite" className="text-caption-2 text-text-low">
+              <span className="font-data tabular-nums text-text-high">
+                {rows.length}
+              </span>
+              {rows.length === 1 ? " project" : " projects"}
+              {" of "}
+              <span className="font-data tabular-nums">{projects.length}</span>
+            </p>
             <button
               type="button"
               onClick={() => setFilters(EMPTY_FILTERS)}
@@ -99,8 +97,8 @@ export function PortfolioBrowser({
             >
               Reset filters
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <NoMatches

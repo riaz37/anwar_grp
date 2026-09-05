@@ -1,5 +1,6 @@
 import "server-only";
 import { AuthzError } from "./authz";
+import { prisma } from "./prisma";
 import type { SessionPayload } from "./session";
 import {
   hasProjectPermission,
@@ -48,4 +49,33 @@ export function isProjectParticipant(
     return true;
   }
   return false;
+}
+
+/**
+ * Loads a project's participant-relevant fields and throws AuthzError(404)
+ * unless the user is a participant per `isProjectParticipant` — 404 rather
+ * than 403 so a non-participant can't distinguish "doesn't exist" from
+ * "exists but you can't see it." Used by both reads (list/detail) and
+ * writes (stage transitions, checklist, milestones, tasks, blockers,
+ * scope changes) so AI_ANALYST/DEVELOPER/BUSINESS_OWNER are scoped to
+ * their assigned projects per the assignment's role table (Sec 9 —
+ * "Developer: View assigned projects"), while AI_TEAM_LEAD/MANAGEMENT
+ * keep portfolio-wide access.
+ */
+export async function requireProjectParticipant(
+  user: SessionPayload,
+  projectId: string,
+): Promise<void> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      ownerId: true,
+      analystId: true,
+      developerId: true,
+      departmentId: true,
+    },
+  });
+  if (!project || !isProjectParticipant(user, project)) {
+    throw new AuthzError("Project not found.", 404, "NOT_FOUND");
+  }
 }

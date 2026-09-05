@@ -4,14 +4,14 @@ import { useState } from "react";
 import type { Role } from "@prisma/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { TextAreaField, TextInputField } from "@/components/ui/Field";
+import { SelectField, TextAreaField, TextInputField } from "@/components/ui/Field";
 import { InlineBanner, LiveRegion } from "@/components/ui/InlineBanner";
 import { Pill } from "@/components/ui/StatusPill";
 import { PlusIcon } from "@/components/ui/icons";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, todayIsoDate } from "@/lib/format";
 import { ApiRequestError, patchJson, postJson } from "@/lib/api-client";
 import { hasProjectPermission } from "@/lib/project-permissions";
-import type { BlockerView } from "../types";
+import type { BlockerView, RefUser } from "../types";
 import {
   Block,
   Empty,
@@ -22,26 +22,35 @@ import {
   Subhead,
 } from "./chrome";
 
-type BlockerFieldErrors = { description?: string; impact?: string };
+type BlockerFieldErrors = {
+  description?: string;
+  impact?: string;
+  responsiblePersonId?: string;
+};
 
 export function BlockersSection({
   projectId,
   blockers,
+  users,
   currentUserRole,
   onChanged,
 }: {
   projectId: string;
   blockers: BlockerView[];
+  users: RefUser[];
   currentUserRole: Role;
   onChanged: () => void;
 }) {
   const canRecord = hasProjectPermission(currentUserRole, "RECORD_BLOCKER");
   const canResolve = hasProjectPermission(currentUserRole, "RESOLVE_BLOCKER");
+  const userOptions = users.map((u) => ({ value: u.id, label: u.name }));
 
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState("");
   const [impact, setImpact] = useState("");
   const [requiredAction, setRequiredAction] = useState("");
+  const [responsiblePersonId, setResponsiblePersonId] = useState("");
+  const [dateIdentified, setDateIdentified] = useState(todayIsoDate());
   const [fieldErrors, setFieldErrors] = useState<BlockerFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -64,10 +73,19 @@ export function BlockersSection({
     const errors: BlockerFieldErrors = {};
     if (!description.trim()) errors.description = "Describe what is blocked.";
     if (!impact.trim()) errors.impact = "State what this stops or delays.";
+    if (!responsiblePersonId) {
+      errors.responsiblePersonId = "Choose who is responsible for clearing this.";
+    }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       document
-        .getElementById(errors.description ? "blocker-description" : "blocker-impact")
+        .getElementById(
+          errors.description
+            ? "blocker-description"
+            : errors.impact
+              ? "blocker-impact"
+              : "blocker-responsible",
+        )
         ?.focus();
       return;
     }
@@ -79,10 +97,14 @@ export function BlockersSection({
         description: description.trim(),
         impact: impact.trim(),
         requiredAction: requiredAction.trim() || undefined,
+        responsiblePersonId,
+        dateIdentified: dateIdentified || undefined,
       });
       setDescription("");
       setImpact("");
       setRequiredAction("");
+      setResponsiblePersonId("");
+      setDateIdentified(todayIsoDate());
       closeForm();
       toast.success("Blocker raised");
       onChanged();
@@ -181,6 +203,30 @@ export function BlockersSection({
               value={requiredAction}
               onChange={setRequiredAction}
             />
+            <SelectField
+              id="blocker-responsible"
+              label="Responsible person"
+              hint="Who owns clearing this blocker."
+              value={responsiblePersonId}
+              onChange={(value) => {
+                setResponsiblePersonId(value);
+                setFieldErrors((current) => ({
+                  ...current,
+                  responsiblePersonId: undefined,
+                }));
+              }}
+              options={userOptions}
+              required
+              error={fieldErrors.responsiblePersonId}
+            />
+            <TextInputField
+              id="blocker-date-identified"
+              label="Date identified"
+              type="date"
+              value={dateIdentified}
+              onChange={setDateIdentified}
+              required
+            />
             <FormActions>
               <Button
                 type="submit"
@@ -240,6 +286,18 @@ export function BlockersSection({
                           </dd>
                         </div>
                       )}
+                      <div>
+                        <dt className="annotation">Responsible person</dt>
+                        <dd className="mt-ds-xxs max-w-[48ch] text-para text-text-high">
+                          {b.responsiblePersonName}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="annotation">Date identified</dt>
+                        <dd className="mt-ds-xxs max-w-[48ch] text-para text-text-high">
+                          <Num>{formatDateTime(b.dateIdentified)}</Num>
+                        </dd>
+                      </div>
                     </dl>
 
                     <p className="mt-ds-2xl text-caption-2 text-muted-foreground">

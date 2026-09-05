@@ -122,7 +122,12 @@ export async function presignUpload(
 }
 
 /**
- * Document download authorization.
+ * Document owner authorization — used for both download (presign-download)
+ * and write (presign-upload, document creation) so a document's access and
+ * its creation inherit the same participant rules as the record it belongs
+ * to. Without this on the write side, any authenticated user could attach a
+ * document row (and, via presign-upload, real file content) to a project
+ * they aren't a participant on.
  *
  * BUILD_PLAN.md Sec 2.6: "download checks the requester's
  * authorization for the owning entity before issuing a presigned GET —
@@ -141,7 +146,7 @@ export async function presignUpload(
  * silently denied. Found by /qa 2026-09-03, fixed by removing the
  * indirection instead of chasing module-identity timing.)
  */
-export async function isAuthorizedToDownload(params: {
+export async function isAuthorizedForDocumentOwner(params: {
   user: SessionPayload;
   ownerType: DocumentOwnerType;
   ownerId: string;
@@ -178,7 +183,7 @@ export interface PresignDownloadResult {
 
 /**
  * Issues a presigned S3/MinIO GET URL for storageKey. Callers MUST
- * have already authorized the request (see isAuthorizedToDownload)
+ * have already authorized the request (see isAuthorizedForDocumentOwner)
  * before calling this — this function itself does not check
  * authorization, it only talks to the object store.
  */

@@ -3,8 +3,9 @@ import { z } from "zod";
 import { DocumentOwnerType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
+import { isAuthorizedForDocumentOwner } from "@/lib/documents";
 import { writeAudit } from "@/lib/audit";
-import { ok, handleRouteError } from "@/lib/api-response";
+import { ok, fail, handleRouteError } from "@/lib/api-response";
 
 const createDocumentSchema = z.object({
   ownerType: z.nativeEnum(DocumentOwnerType),
@@ -27,6 +28,19 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
     const body = createDocumentSchema.parse(await req.json());
+
+    const authorized = await isAuthorizedForDocumentOwner({
+      user,
+      ownerType: body.ownerType,
+      ownerId: body.ownerId,
+    });
+    if (!authorized) {
+      return fail(
+        "FORBIDDEN",
+        "You are not authorized to attach documents to this record.",
+        403,
+      );
+    }
 
     const document = await prisma.document.create({
       data: {

@@ -196,6 +196,12 @@ export default async function ManagementDashboardPage() {
     )
     .reduce((sum, h) => sum + h.count, 0);
 
+  // Denominators for the gauges on the figure strip. Both come from counts
+  // this page already holds — a tile only gets a gauge where the ratio is
+  // real, never against an invented target.
+  const totalProjects = stageCounts.reduce((sum, s) => sum + s._count._all, 0);
+  const nearTermMilestones = overdueMilestoneTotal + upcomingMilestoneTotal;
+
   const oldestActiveDays = oldestActiveProject
     ? daysSince(oldestActiveProject.createdAt.toISOString(), now)
     : null;
@@ -302,7 +308,8 @@ export default async function ManagementDashboardPage() {
 
       {/* Portfolio figures. Four counts read against each other, so they share
           one row and one type treatment; only a count that needs acting on
-          takes colour. */}
+          takes colour. Each carries a gauge of the figure against its own real
+          whole — the share is the part a number alone can't show. */}
       <div className="mt-ds-7xl grid grid-cols-1 gap-ds-2xl sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           index={0}
@@ -315,6 +322,14 @@ export default async function ManagementDashboardPage() {
           }
           icon={ActiveIcon}
           href="/projects"
+          share={
+            totalProjects > 0
+              ? {
+                  total: totalProjects,
+                  label: `${totalActiveProjects} of ${totalProjects} projects on the books are still running.`,
+                }
+              : undefined
+          }
         />
         <StatTile
           index={1}
@@ -323,6 +338,14 @@ export default async function ManagementDashboardPage() {
           hint="Blocked or delayed right now"
           icon={AttentionIcon}
           tone="warning"
+          share={
+            totalProjects > 0
+              ? {
+                  total: totalProjects,
+                  label: `${needsDecisionCount} of ${totalProjects} projects are blocked or delayed.`,
+                }
+              : undefined
+          }
         />
         <StatTile
           index={2}
@@ -331,6 +354,14 @@ export default async function ManagementDashboardPage() {
           hint="Past their due date, still open"
           icon={OverdueIcon}
           tone="error"
+          share={
+            nearTermMilestones > 0
+              ? {
+                  total: nearTermMilestones,
+                  label: `${overdueMilestoneTotal} of ${nearTermMilestones} near-term milestones are already late.`,
+                }
+              : undefined
+          }
         />
         <StatTile
           index={3}
@@ -338,12 +369,46 @@ export default async function ManagementDashboardPage() {
           value={upcomingMilestoneTotal}
           hint="Open milestones landing this week"
           icon={UpcomingIcon}
+          share={
+            nearTermMilestones > 0
+              ? {
+                  total: nearTermMilestones,
+                  label: `${upcomingMilestoneTotal} of ${nearTermMilestones} near-term milestones are still inside their due date.`,
+                }
+              : undefined
+          }
         />
       </div>
 
+      {/* The two portfolio-wide graphics lead the page: the state of the work
+          on the left, its throughput on the right. Everything below them is a
+          drill-down into one of the two. */}
       <div className="mt-ds-5xl grid grid-cols-1 gap-ds-2xl lg:grid-cols-12">
         <Panel
+          className="rise-in lg:col-span-4"
+          title="Portfolio health"
+          description="Every project by its current state"
+        >
+          <HealthMix slices={byHealth} />
+        </Panel>
+
+        <Panel
           className="rise-in lg:col-span-8"
+          title="Milestone throughput"
+          description={`Completions per day over the last ${TREND_DAYS} days, on time against late`}
+        >
+          <CompletionTrend buckets={trendBuckets} />
+        </Panel>
+      </div>
+
+      {/* Needs attention pairs with Expected this month rather than Pipeline
+          by stage: both run a handful of rows at a similar width, so they
+          land close in height on their own. Pipeline by stage always renders
+          all nine stages — a fixed length nothing else here matches — so it
+          gets a row to itself instead of a mismatched partner. */}
+      <div className="mt-ds-2xl grid grid-cols-1 items-start gap-ds-2xl lg:grid-cols-2">
+        <Panel
+          className="rise-in"
           title="Needs attention"
           description="Blocked and delayed projects, with the reason on the row."
           meta={listMeta(
@@ -356,46 +421,21 @@ export default async function ManagementDashboardPage() {
           <AttentionList items={attentionItems} />
         </Panel>
 
-        <div className="flex flex-col gap-ds-2xl lg:col-span-4">
-          <Panel className="rise-in" title="Portfolio health">
-            <HealthMix slices={byHealth} />
-          </Panel>
-
-          <Panel
-            className="rise-in"
-            title="Expected this month"
-            meta={
-              expectedThisMonth.length > 0
-                ? `${expectedThisMonth.length} project${expectedThisMonth.length === 1 ? "" : "s"}`
-                : undefined
-            }
-            padded={false}
-          >
-            <DeliveryList projects={expectedThisMonth} />
-          </Panel>
-        </div>
-      </div>
-
-      <div className="mt-ds-2xl grid grid-cols-1 gap-ds-2xl lg:grid-cols-12">
         <Panel
-          className="rise-in lg:col-span-7"
-          title="Milestones completed"
-          description={`Per day over the last ${TREND_DAYS} days`}
+          className="rise-in"
+          title="Expected this month"
+          meta={
+            expectedThisMonth.length > 0
+              ? `${expectedThisMonth.length} project${expectedThisMonth.length === 1 ? "" : "s"}`
+              : undefined
+          }
+          padded={false}
         >
-          <CompletionTrend buckets={trendBuckets} />
-        </Panel>
-
-        <Panel
-          className="rise-in lg:col-span-5"
-          title="Pipeline by stage"
-          description="Active projects only"
-          meta={`${completedCount} completed excluded`}
-        >
-          <StageBreakdown stages={activeByStage} />
+          <DeliveryList projects={expectedThisMonth} />
         </Panel>
       </div>
 
-      <div className="mt-ds-2xl grid grid-cols-1 gap-ds-2xl lg:grid-cols-2">
+      <div className="mt-ds-2xl grid grid-cols-1 items-start gap-ds-2xl lg:grid-cols-2">
         <Panel
           className="rise-in"
           title="Overdue milestones"
@@ -432,6 +472,15 @@ export default async function ManagementDashboardPage() {
           />
         </Panel>
       </div>
+
+      <Panel
+        className="mt-ds-2xl rise-in"
+        title="Pipeline by stage"
+        description="Where the active work is sitting"
+        meta={`${completedCount} completed excluded`}
+      >
+        <StageBreakdown stages={activeByStage} />
+      </Panel>
 
       <Panel
         className="mt-ds-2xl rise-in"

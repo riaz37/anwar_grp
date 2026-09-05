@@ -1,4 +1,5 @@
 import { PanelEmpty } from "./Panel";
+import { BarRow } from "./BarRow";
 
 export type WorkloadRow = { userId: string; name: string; count: number };
 
@@ -8,7 +9,8 @@ export type WorkloadRow = { userId: string; name: string; count: number };
  * Sorted by load rather than alphabetically, because the only question this
  * answers is "who is carrying too much". Bars are drawn against the busiest
  * person in the column, so the comparison stays inside the role — an analyst
- * with four projects and a developer with four are not the same load.
+ * with four projects and a developer with four are not the same load — and the
+ * heaviest bar in each column is the one at full accent.
  */
 export function WorkloadList({
   heading,
@@ -20,35 +22,34 @@ export function WorkloadList({
   emptyNote: string;
 }) {
   const max = Math.max(...rows.map((r) => r.count), 0);
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
 
   return (
     <div>
-      <h3 className="annotation">{heading}</h3>
+      <div className="flex items-baseline justify-between gap-ds-2xl">
+        <h3 className="annotation">{heading}</h3>
+        {rows.length > 0 && (
+          <p className="font-data text-caption-2 tabular-nums text-text-low">
+            {total} across {rows.length}
+          </p>
+        )}
+      </div>
 
       {rows.length === 0 ? (
         <div className="mt-ds-2xl">
           <PanelEmpty>{emptyNote}</PanelEmpty>
         </div>
       ) : (
-        <ol className="mt-ds-2xl flex flex-col gap-ds-xl">
+        <ol className="mt-ds-2xl flex flex-col gap-ds-md">
           {rows.map((r) => (
-            <li key={r.userId} className="flex items-center gap-ds-2xl">
-              <span className="w-[14ch] shrink-0 truncate text-body-1 text-text-med">
-                {r.name}
-              </span>
-              <span
-                aria-hidden="true"
-                className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-pill bg-surface-2"
-              >
-                <span
-                  className="block h-full rounded-pill bg-text-low"
-                  style={{ width: `${Math.max(3, (r.count / max) * 100)}%` }}
-                />
-              </span>
-              <span className="w-5 shrink-0 text-right font-data text-body-1 tabular-nums text-text-high">
-                {r.count}
-              </span>
-            </li>
+            <BarRow
+              key={r.userId}
+              label={r.name}
+              value={r.count}
+              max={max}
+              leading={r.count === max}
+              labelWidth="w-[11ch] sm:w-[15ch]"
+            />
           ))}
         </ol>
       )}

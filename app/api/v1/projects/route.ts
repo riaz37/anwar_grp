@@ -4,6 +4,7 @@ import { ProjectHealth, ProjectStage, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
 import { requireProjectPermission } from "@/lib/project-authz";
+import { PORTFOLIO_WIDE_ROLES } from "@/lib/project-permissions";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 import { parsePagination } from "@/lib/pagination";
@@ -112,7 +113,7 @@ const listQuerySchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const { searchParams } = req.nextUrl;
     const filters = listQuerySchema.parse({
       businessUnitId: searchParams.get("businessUnitId") ?? undefined,
@@ -125,14 +126,38 @@ export async function GET(req: NextRequest) {
     });
     const { skip, take, page, limit } = parsePagination(searchParams);
 
+    // AI_TEAM_LEAD/MANAGEMENT see the whole portfolio (assignment Sec 9:
+    // "View all projects" / "View portfolio status"). Everyone else is
+    // scoped to projects they're a participant on ("Developer: View
+    // assigned projects") — mirrors isProjectParticipant's rule set.
+    const participantScope: Prisma.ProjectWhereInput[] = PORTFOLIO_WIDE_ROLES.has(
+      user.role,
+    )
+      ? []
+      : [
+          {
+            OR: [
+              { ownerId: user.userId },
+              { analystId: user.userId },
+              { developerId: user.userId },
+              ...(user.role === "BUSINESS_OWNER" && user.departmentId
+                ? [{ departmentId: user.departmentId }]
+                : []),
+            ],
+          },
+        ];
+
     const where: Prisma.ProjectWhereInput = {
-      ...(filters.businessUnitId && { businessUnitId: filters.businessUnitId }),
-      ...(filters.departmentId && { departmentId: filters.departmentId }),
-      ...(filters.currentStage && { currentStage: filters.currentStage }),
-      ...(filters.health && { health: filters.health }),
-      ...(filters.ownerId && { ownerId: filters.ownerId }),
-      ...(filters.analystId && { analystId: filters.analystId }),
-      ...(filters.developerId && { developerId: filters.developerId }),
+      AND: [
+        ...(filters.businessUnitId ? [{ businessUnitId: filters.businessUnitId }] : []),
+        ...(filters.departmentId ? [{ departmentId: filters.departmentId }] : []),
+        ...(filters.currentStage ? [{ currentStage: filters.currentStage }] : []),
+        ...(filters.health ? [{ health: filters.health }] : []),
+        ...(filters.ownerId ? [{ ownerId: filters.ownerId }] : []),
+        ...(filters.analystId ? [{ analystId: filters.analystId }] : []),
+        ...(filters.developerId ? [{ developerId: filters.developerId }] : []),
+        ...participantScope,
+      ],
     };
 
     const [total, projects] = await Promise.all([

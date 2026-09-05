@@ -79,7 +79,20 @@ numeral (dates, counts, ageing days).
 | `heading-1` | 22 / 32 | Panel titles |
 | `heading-2` | 26 / 32 | Modal titles |
 | `display-1` | fluid 26–34 | Page `<h1>` — not in the source scale, added since this app has real dashboard page titles the dense scale didn't cover |
+| `display-hero` | fluid 38–104 | **Marketing only.** The landing-page `<h1>` |
+| `display-2` | fluid 30–60 | **Marketing only.** Landing-page section `<h2>` |
 | `metric` | fluid 24–30 | Stat readouts (counts, dashboard numbers) |
+
+`display-hero`/`display-2` are scoped by convention to the `(marketing)`
+route group and must not appear in `(dashboard)`. The dense scale tops out
+at 34px because an app page title sits directly above a data table; the
+public page has no table under it and needs the cinematic step the source
+system uses on its own homepage. Both are set at 600 weight with the
+`-0.03em`/`-0.025em` tracking a display size needs to stay optically even.
+
+Marketing headings are set two-tone — the claim in `text-high`, the
+qualifier completing the sentence in `text-low` — rather than reaching for
+a gradient fill. Same device, one pigment, and it survives greyscale.
 
 Weight: 500 = normal/body, 600 = labels/titles/emphasis. No third weight.
 Letter spacing 0 except `display-1`/`metric` (-0.02em).
@@ -167,6 +180,31 @@ Transform/opacity only. `ease-enter`/`ease-exit`/`ease-move` cubic-beziers,
 100/200/300/500ms duration bands. Full `prefers-reduced-motion` kill-switch —
 durations and delays both zeroed, entrance animations dropped to their
 resting (visible) state rather than merely sped up.
+
+There is **no animation library** in this app and none should be added. The
+marketing route group's motion is four CSS utilities in `globals.css`, all
+stagger-driven by a `--i` custom property:
+
+| Utility | Effect |
+|---|---|
+| `.rise-in` | One-shot entrance, already used across the app |
+| `.word-mask` | Per-word clipping box; the child unrolls from beneath it (landing `<h1>`) |
+| `[data-reveal]` | Scroll-triggered fade/rise, armed by `components/marketing/ScrollReveal.tsx` |
+| `.glare-sweep` | One specular pass across an elevated showcase panel |
+| `.glow-parallax` | Scroll parallax via `animation-timeline: view()`, behind `@supports` |
+
+**Fails visible.** `[data-reveal]`'s hidden state is scoped to a
+`.reveal-armed` class that `ScrollReveal` only adds after mounting and
+confirming `IntersectionObserver`. A script failure, an old browser, reduced
+motion, or a crawler therefore all get the fully-rendered page — no content
+on a public page may ever depend on JavaScript to become visible.
+
+Decorative light (`components/marketing/GlowField.tsx`, and the cropped
+glows in sections 03 and Access) is the one place raw `rgba()` accent paint
+is allowed: it is a light rig, not a semantic colour, and no token names
+"the brand pigment at 14%". It is always `aria-hidden`,
+`pointer-events-none`, behind content, and dimmed hard under
+`[data-theme="light"]` where a lime wash would eat body-copy contrast.
 
 ## 9. Accessibility
 

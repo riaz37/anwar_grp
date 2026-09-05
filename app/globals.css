@@ -293,6 +293,18 @@
   --text-display-1: clamp(26px, 1.2rem + 1.4vw, 34px);
   --text-display-1--line-height: 1.15;
   --text-display-1--letter-spacing: -0.02em;
+
+  /* Marketing display steps. The dense dashboard scale tops out at 34px
+     because an app page title sits above a data table; the public landing
+     page has no table under it and needs the cinematic weight the source
+     system uses on its own homepage. Scoped by convention to the
+     `(marketing)` route group — see DESIGN.md §2. */
+  --text-display-hero: clamp(38px, 7.6vw, 104px);
+  --text-display-hero--line-height: 1.04;
+  --text-display-hero--letter-spacing: -0.03em;
+  --text-display-2: clamp(30px, 4.4vw, 60px);
+  --text-display-2--line-height: 1.08;
+  --text-display-2--letter-spacing: -0.025em;
   --text-metric: clamp(24px, 1.1rem + 1.1vw, 30px);
   --text-metric--line-height: 1.1;
   --text-metric--letter-spacing: -0.02em;
@@ -465,6 +477,96 @@
   animation-delay: calc(var(--i, 0) * 60ms);
 }
 
+/* ==========================================================================
+   Marketing motion (DESIGN.md §8). Transform/opacity only, no library.
+   Every one of these is killed outright by the reduced-motion block below.
+   ========================================================================== */
+
+/* Headline word unmask: each word is wrapped in an `.word-mask` clipping box
+   and unrolled from beneath it, staggered by `--i`. */
+@keyframes word-rise {
+  from {
+    transform: translate3d(0, 118%, 0) rotate(4deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.word-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.1em;
+}
+
+.word-mask > span {
+  display: inline-block;
+  will-change: transform;
+  animation: word-rise 900ms var(--ease-enter) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* Scroll-triggered reveal. The *hidden* state is scoped to `.reveal-armed`,
+   which `components/marketing/ScrollReveal.tsx` puts on <html> only after it
+   has mounted and confirmed IntersectionObserver support — so a JS failure,
+   an old browser, or a crawler all get fully visible content instead of a
+   blank page. */
+[data-reveal] {
+  transition:
+    opacity var(--duration-long) var(--ease-enter),
+    transform var(--duration-long) var(--ease-enter);
+  transition-delay: calc(var(--i, 0) * 55ms);
+}
+
+.reveal-armed [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 28px, 0) scale(0.985);
+}
+
+.reveal-armed [data-reveal][data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+/* One specular sweep across the showcase panel after it settles. */
+@keyframes glare-sweep {
+  from {
+    transform: translate3d(-170%, 0, 0) skewX(-12deg);
+    opacity: 0.85;
+  }
+  to {
+    transform: translate3d(280%, 0, 0) skewX(-12deg);
+    opacity: 0;
+  }
+}
+
+.glare-sweep {
+  animation: glare-sweep 1400ms var(--ease-move) 900ms both;
+}
+
+/* Scroll parallax with no JS and no scroll listener. `animation-timeline`
+   ships in Chromium only today, so it is a pure enhancement: browsers without
+   it simply render the glow at its resting position. */
+@keyframes glow-drift {
+  from {
+    transform: translate3d(0, -7%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(0, 16%, 0) scale(1.18);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .glow-parallax {
+      animation: glow-drift linear both;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+
 /* One diagonal hatch, reused wherever a shape means "flagged"/"late" — a
    pattern rather than a paler fill so the distinction survives greyscale
    and every kind of colour blindness. Uses currentColor so callers set the
@@ -494,5 +596,23 @@
 
   .rise-in {
     animation: none !important;
+  }
+
+  /* Entrances drop to their resting (visible) state rather than merely
+     speeding up — DESIGN.md §8. */
+  .word-mask > span,
+  .glow-parallax {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .glare-sweep {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .reveal-armed [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

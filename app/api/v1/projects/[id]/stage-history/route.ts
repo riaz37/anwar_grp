@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
+import { requireProjectParticipant } from "@/lib/project-authz";
 import { ok, handleRouteError } from "@/lib/api-response";
 
 export async function GET(
@@ -7,8 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const { id } = await params;
+    await requireProjectParticipant(user, id);
 
     const history = await prisma.projectStageHistory.findMany({
       where: { projectId: id },

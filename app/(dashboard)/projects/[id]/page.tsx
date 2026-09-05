@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { isProjectParticipant } from "@/lib/project-authz";
+import { PORTFOLIO_WIDE_ROLES } from "@/lib/project-permissions";
 import { computeChecklistReadiness } from "@/lib/checklist-engine";
 import { isMilestoneAtRisk, isMilestoneOverdue } from "@/lib/project-health";
 import { ProjectDetailView } from "@/components/projects/detail/ProjectDetailView";
@@ -14,11 +16,22 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  const session = await getSession();
+  if (!session) return { title: "Project" };
+
   const project = await prisma.project.findUnique({
     where: { id },
-    select: { name: true },
+    select: { name: true, ownerId: true, analystId: true, developerId: true, departmentId: true },
   });
-  return { title: project?.name ?? "Project" };
+  if (!project) return { title: "Project" };
+
+  // Same participant scoping as the page body — the title must not leak
+  // a project's name to a signed-in user who isn't on it.
+  if (!PORTFOLIO_WIDE_ROLES.has(session.role) && !isProjectParticipant(session, project)) {
+    return { title: "Project" };
+  }
+
+  return { title: project.name };
 }
 
 export default async function ProjectWorkspacePage({
@@ -32,6 +45,19 @@ export default async function ProjectWorkspacePage({
   // page exists, they just can't see it yet. (The `(dashboard)` layout already
   // redirects; this keeps the page correct if it is ever rendered elsewhere.)
   if (!session) redirect("/login");
+
+  // Participant-scoped: mirrors GET /api/v1/projects/[id]. Renders 404
+  // rather than 403 so a non-participant can't distinguish "doesn't
+  // exist" from "exists but you can't see it."
+  if (!PORTFOLIO_WIDE_ROLES.has(session.role)) {
+    const participantCheck = await prisma.project.findUnique({
+      where: { id },
+      select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+    });
+    if (!participantCheck || !isProjectParticipant(session, participantCheck)) {
+      notFound();
+    }
+  }
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -48,6 +74,7 @@ export default async function ProjectWorkspacePage({
         include: {
           raisedBy: { select: { id: true, name: true } },
           resolvedBy: { select: { id: true, name: true } },
+          responsiblePerson: { select: { id: true, name: true } },
         },
       },
       scopeChanges: {
@@ -175,6 +202,9 @@ export default async function ProjectWorkspacePage({
         description: b.description,
         impact: b.impact,
         requiredAction: b.requiredAction,
+        responsiblePersonId: b.responsiblePerson.id,
+        responsiblePersonName: b.responsiblePerson.name,
+        dateIdentified: b.dateIdentified.toISOString(),
         raisedByName: b.raisedBy.name,
         createdAt: b.createdAt.toISOString(),
         resolvedAt: b.resolvedAt ? b.resolvedAt.toISOString() : null,

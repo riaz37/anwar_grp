@@ -145,9 +145,6 @@ export function Empty({
 }) {
   return (
     <div className="flex flex-col items-start gap-ds-md border-y border-outline-low py-ds-9xl">
-      {/* A lime tick, not an icon in a rounded box: it matches the page
-          header's registration mark and adds no second shape. */}
-      <span aria-hidden className="block h-[3px] w-6 bg-primary-med" />
       <p className="text-body-2 font-semibold text-text-high">{title}</p>
       <p className="max-w-[58ch] text-pretty text-para text-muted-foreground">
         {children}

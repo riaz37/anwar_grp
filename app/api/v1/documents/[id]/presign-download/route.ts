@@ -1,6 +1,6 @@
 import { requireAuth } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { presignDownload, isAuthorizedToDownload } from "@/lib/documents";
+import { presignDownload, isAuthorizedForDocumentOwner } from "@/lib/documents";
 import { writeAudit } from "@/lib/audit";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -8,7 +8,7 @@ import { ok, fail, handleRouteError } from "@/lib/api-response";
  * GET /api/v1/documents/:id/presign-download
  *
  * Authz: requires a logged-in user AND passes the owning entity's
- * pluggable authorization check (lib/documents.ts:isAuthorizedToDownload)
+ * pluggable authorization check (lib/documents.ts:isAuthorizedForDocumentOwner)
  * before ever issuing a presigned GET — per BUILD_PLAN.md Sec 2.6.
  * Since no owning module has registered a checker yet in Phase 1, this
  * currently fails closed (denies) for every ownerType until a later
@@ -27,7 +27,7 @@ export async function GET(
       return fail("NOT_FOUND", "Document not found.", 404);
     }
 
-    const authorized = await isAuthorizedToDownload({
+    const authorized = await isAuthorizedForDocumentOwner({
       user,
       ownerType: document.ownerType,
       ownerId: document.ownerId,

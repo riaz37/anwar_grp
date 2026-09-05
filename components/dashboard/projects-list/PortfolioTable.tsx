@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Pill } from "@/components/ui/StatusPill";
 import { HEALTH_LABELS, HEALTH_TONE } from "@/components/projects/projectTone";
 import { SortIcon } from "@/components/ui/icons";
@@ -22,6 +23,8 @@ export function PortfolioTable({
   sort: SortState;
   onSort: (key: SortKey) => void;
 }) {
+  const router = useRouter();
+
   return (
     <div className="overflow-x-auto rounded-xl border border-outline-low bg-surface-0">
       <table className="w-full min-w-[900px] border-collapse text-left">
@@ -65,11 +68,13 @@ export function PortfolioTable({
           {projects.map((project) => (
             <tr
               key={project.id}
-              className="group border-b border-outline-base transition-colors duration-100 ease-[var(--ease-move)] last:border-0 hover:bg-surface-1 focus-within:bg-surface-1"
+              onClick={() => router.push(`/projects/${project.id}`)}
+              className="group cursor-pointer border-b border-outline-base transition-colors duration-100 ease-[var(--ease-move)] last:border-0 hover:bg-surface-1 focus-within:bg-surface-1"
             >
               <td className={cn(CELL, "max-w-0")}>
                 <Link
                   href={`/projects/${project.id}`}
+                  onClick={(e) => e.stopPropagation()}
                   className="block truncate text-title-1 font-semibold text-text-high transition-colors duration-100 ease-[var(--ease-move)] hover:text-primary-high"
                 >
                   {project.name}
@@ -91,7 +96,7 @@ export function PortfolioTable({
                   label={HEALTH_LABELS[project.health]}
                 />
               </td>
-              <td className={cn(CELL, "max-w-0")}>
+              <td className={CELL}>
                 <PeopleStack project={project} />
               </td>
               <td className={CELL}>

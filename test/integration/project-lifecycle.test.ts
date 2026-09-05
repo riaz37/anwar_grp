@@ -229,6 +229,7 @@ describe("computeProjectHealth", () => {
         projectId: project.id,
         description: "Something is blocking us.",
         impact: "Big impact.",
+        responsiblePersonId: org.developer.id,
         raisedById: org.developer.id,
       },
     });
@@ -254,6 +255,7 @@ describe("computeProjectHealth", () => {
         projectId: project.id,
         description: "Something is blocking us.",
         impact: "Big impact.",
+        responsiblePersonId: org.developer.id,
         raisedById: org.developer.id,
       },
     });

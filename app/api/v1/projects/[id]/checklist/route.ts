@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/authz";
+import { requireProjectParticipant } from "@/lib/project-authz";
 import { computeChecklistReadiness } from "@/lib/checklist-engine";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
@@ -8,8 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const { id } = await params;
+    await requireProjectParticipant(user, id);
 
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) {

@@ -76,6 +76,7 @@ model User {
   tasksOwned            ProjectTask[]            @relation("TaskOwner")
   blockersRaised        Blocker[]                @relation("BlockerRaisedBy")
   blockersResolved      Blocker[]                @relation("BlockerResolvedBy")
+  blockersResponsibleFor Blocker[]               @relation("BlockerResponsiblePerson")
   scopeChangesRequested ScopeChange[]            @relation("ScopeChangeRequestedBy")
   delayReasonsRecorded  DelayReason[]            @relation("DelayReasonRecordedBy")
 
@@ -332,20 +333,28 @@ model ProjectTask {
 // overriding the milestone-derived status — resolving it re-triggers
 // health recomputation from the remaining milestone state.
 model Blocker {
-  id              String    @id @default(cuid())
-  projectId       String
-  project         Project   @relation(fields: [projectId], references: [id])
-  description     String
-  impact          String
-  requiredAction  String?
-  raisedById      String
-  raisedBy        User      @relation("BlockerRaisedBy", fields: [raisedById], references: [id])
-  resolvedAt      DateTime?
-  resolvedById    String?
-  resolvedBy      User?     @relation("BlockerResolvedBy", fields: [resolvedById], references: [id])
-  resolutionNotes String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  projectId           String
+  project             Project   @relation(fields: [projectId], references: [id])
+  description         String
+  impact              String
+  requiredAction      String?
+  // Assignment Sec 4/6 blocker fields: "Responsible person" (who must act
+  // to clear it — distinct from raisedBy, who reported it) and
+  // "Date identified" (when the blocker actually surfaced, which may
+  // predate the record being entered — defaults to createdAt but is
+  // editable).
+  responsiblePersonId String
+  responsiblePerson   User      @relation("BlockerResponsiblePerson", fields: [responsiblePersonId], references: [id])
+  dateIdentified      DateTime  @default(now())
+  raisedById          String
+  raisedBy            User      @relation("BlockerRaisedBy", fields: [raisedById], references: [id])
+  resolvedAt          DateTime?
+  resolvedById        String?
+  resolvedBy          User?     @relation("BlockerResolvedBy", fields: [resolvedById], references: [id])
+  resolutionNotes     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([projectId])
   @@index([projectId, resolvedAt])

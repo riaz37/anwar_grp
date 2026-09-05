@@ -13,6 +13,25 @@ import { TONE_TEXT, type Tone } from "@/components/ui/tone";
  * warning — a tile is otherwise neutral, so the one red count on the row is the
  * thing the eye lands on.
  */
+/** Fill for the share gauge, per tone. Deliberately full-saturation `-med`
+ *  inks rather than the `-high` text inks: this is a 6px bar, not type. */
+const GAUGE_FILL: Record<Tone, string> = {
+  neutral: "bg-primary-med",
+  accent: "bg-primary-med",
+  info: "bg-info-med",
+  warning: "bg-warn-med",
+  success: "bg-success-med",
+  error: "bg-danger-med",
+};
+
+/** A real ratio this figure is part of. Never a synthetic target — every
+ *  denominator here is a count the page already queried. */
+export type StatShare = {
+  total: number;
+  /** Spoken form of the ratio, for assistive tech. */
+  label: string;
+};
+
 export function StatTile({
   label,
   value,
@@ -20,6 +39,7 @@ export function StatTile({
   icon: Icon,
   tone = "neutral",
   href,
+  share,
   index = 0,
 }: {
   label: string;
@@ -29,10 +49,14 @@ export function StatTile({
   /** Applied to the figure only when the count is non-zero. */
   tone?: Tone;
   href?: string;
+  /** Draws a gauge under the figure, showing it against its own whole. */
+  share?: StatShare;
   /** Stagger position for the page-load reveal. */
   index?: number;
 }) {
   const emphasised = tone !== "neutral" && value > 0;
+  const ratio =
+    share && share.total > 0 ? Math.min(value / share.total, 1) : null;
 
   const body = (
     <>
@@ -48,15 +72,36 @@ export function StatTile({
         </span>
       </div>
 
-      <p
-        className={cn(
-          "mt-ds-5xl font-data text-metric font-semibold tabular-nums",
-          emphasised ? TONE_TEXT[tone] : "text-text-high",
+      <p className="mt-ds-5xl flex items-baseline gap-ds-md">
+        <span
+          className={cn(
+            "font-data text-metric font-semibold tabular-nums",
+            emphasised ? TONE_TEXT[tone] : "text-text-high",
+          )}
+        >
+          {value}
+        </span>
+        {share && (
+          <span className="font-data text-caption-2 tabular-nums text-text-low">
+            of {share.total}
+          </span>
         )}
-      >
-        {value}
       </p>
-      <p className="mt-ds-xs text-para text-text-low">{hint}</p>
+
+      {ratio !== null && (
+        <span
+          role="img"
+          aria-label={share?.label}
+          className="mt-ds-lg block h-1.5 overflow-hidden rounded-pill bg-surface-3"
+        >
+          <span
+            className={cn("block h-full rounded-pill", GAUGE_FILL[tone])}
+            style={{ width: `${Math.max(ratio * 100, ratio > 0 ? 4 : 0)}%` }}
+          />
+        </span>
+      )}
+
+      <p className="mt-ds-lg text-para text-text-low">{hint}</p>
     </>
   );
 

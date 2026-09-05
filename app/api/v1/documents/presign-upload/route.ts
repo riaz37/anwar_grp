@@ -4,6 +4,7 @@ import { DocumentOwnerType } from "@prisma/client";
 import { requireAuth } from "@/lib/authz";
 import {
   presignUpload,
+  isAuthorizedForDocumentOwner,
   DocumentValidationError,
   ALLOWED_CONTENT_TYPES,
   MAX_UPLOAD_SIZE_BYTES,
@@ -22,19 +23,29 @@ const presignUploadSchema = z.object({
 /**
  * POST /api/v1/documents/presign-upload
  *
- * Authz: any authenticated user may request an upload URL — Phase 1
- * has no owning-entity model to check ownership against yet (see
- * lib/documents.ts doc comment on the download side's pluggable
- * checker). Later phases may want to tighten this to
- * requireRole([...]) per ownerType once Requisition/Candidate/etc.
- * exist; tracked as a follow-up, not a Phase 1 gap, since the actual
- * DB write (creating the Document row once upload completes) happens
- * in whichever module owns that entity and can apply its own rules.
+ * Authz: same owning-entity check as the download side
+ * (isAuthorizedForDocumentOwner) — without it, any authenticated user
+ * could get a presigned PUT into another project's storage namespace
+ * (buildStorageKey scopes by ownerId) even though they can't see that
+ * project anywhere else in the app.
  */
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
     const body = presignUploadSchema.parse(await req.json());
+
+    const authorized = await isAuthorizedForDocumentOwner({
+      user,
+      ownerType: body.ownerType,
+      ownerId: body.ownerId,
+    });
+    if (!authorized) {
+      return fail(
+        "FORBIDDEN",
+        "You are not authorized to upload documents for this record.",
+        403,
+      );
+    }
 
     const result = await presignUpload(body);
 
