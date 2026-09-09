@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { z } from "zod";
 import { AuthzError, requireAuth } from "@/lib/authz";
 import { requireProjectPermission, requireProjectParticipant } from "@/lib/project-authz";
@@ -58,13 +58,18 @@ export async function PATCH(
       checkedById: user.userId,
     });
 
-    await writeAudit({
-      actorId: user.userId,
-      action: "project.checklist_item_toggle",
-      entityType: "StageGateChecklistItem",
-      entityId: updated.id,
-      metadata: { projectId: id, checked: body.checked, label: updated.label },
-    });
+    // Deferred: the client doesn't need to wait on the audit write to see
+    // its own change take effect. Cuts one cross-region round trip off the
+    // perceived latency of every checklist toggle.
+    after(() =>
+      writeAudit({
+        actorId: user.userId,
+        action: "project.checklist_item_toggle",
+        entityType: "StageGateChecklistItem",
+        entityId: updated.id,
+        metadata: { projectId: id, checked: body.checked, label: updated.label },
+      }),
+    );
 
     return ok(updated);
   } catch (err) {

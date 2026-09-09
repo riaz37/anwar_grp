@@ -31,15 +31,15 @@ export function isMilestoneAtRisk(milestone: {
 export async function computeProjectHealth(
   projectId: string,
 ): Promise<ProjectHealth> {
-  const activeBlockerCount = await prisma.blocker.count({
-    where: { projectId, resolvedAt: null },
-  });
+  // Independent reads — run concurrently rather than sequentially.
+  const [activeBlockerCount, milestones] = await Promise.all([
+    prisma.blocker.count({ where: { projectId, resolvedAt: null } }),
+    prisma.milestone.findMany({
+      where: { projectId, status: { not: "DONE" } },
+      select: { dueDate: true, status: true },
+    }),
+  ]);
   if (activeBlockerCount > 0) return "BLOCKED";
-
-  const milestones = await prisma.milestone.findMany({
-    where: { projectId, status: { not: "DONE" } },
-    select: { dueDate: true, status: true },
-  });
 
   if (milestones.some((m) => isMilestoneOverdue(m))) return "DELAYED";
   if (milestones.some((m) => isMilestoneAtRisk(m))) return "AT_RISK";

@@ -1,7 +1,8 @@
 import "server-only";
+import { after } from "next/server";
 import { prisma } from "./prisma";
 import { ProjectStage } from "@prisma/client";
-import { isStageGateSatisfied, seedStageGateChecklist } from "./checklist-engine";
+import { seedStageGateChecklist } from "./checklist-engine";
 import { recomputeProjectHealth } from "./project-health";
 import { writeAudit } from "./audit";
 import type { SessionPayload } from "./session";
@@ -70,19 +71,20 @@ export async function transitionProjectStage(params: {
     );
   }
 
-  const gateSatisfied = await isStageGateSatisfied(
-    project.id,
-    project.currentStage,
+  // One read instead of two: the gate check (any required+unchecked item?)
+  // and the evidence snapshot both just need every checklist item for this
+  // project+stage, so derive both from a single query.
+  const evidenceSnapshot = await prisma.stageGateChecklistItem.findMany({
+    where: { projectId: project.id, stage: project.currentStage },
+  });
+  const gateSatisfied = evidenceSnapshot.every(
+    (item) => !item.required || item.checked,
   );
   if (!gateSatisfied) {
     throw new StageTransitionError(
       `All required checklist items for ${project.currentStage} must be checked before advancing.`,
     );
   }
-
-  const evidenceSnapshot = await prisma.stageGateChecklistItem.findMany({
-    where: { projectId: project.id, stage: project.currentStage },
-  });
 
   const [, updatedProject] = await prisma.$transaction([
     prisma.projectStageHistory.create({
@@ -102,18 +104,24 @@ export async function transitionProjectStage(params: {
   ]);
 
   await seedStageGateChecklist(project.id, params.toStage);
+  // Health must be recomputed before returning — the client re-fetches the
+  // project right after this and expects the health badge to already
+  // reflect the new stage. The audit write, unlike health, isn't
+  // user-visible, so it's deferred to after the response is sent.
   await recomputeProjectHealth(project.id);
-  await writeAudit({
-    actorId: params.actor.userId,
-    action: "project.stage_transition",
-    entityType: "Project",
-    entityId: project.id,
-    metadata: {
-      fromStage: project.currentStage,
-      toStage: params.toStage,
-      notes: params.notes ?? null,
-    },
-  });
+  after(() =>
+    writeAudit({
+      actorId: params.actor.userId,
+      action: "project.stage_transition",
+      entityType: "Project",
+      entityId: project.id,
+      metadata: {
+        fromStage: project.currentStage,
+        toStage: params.toStage,
+        notes: params.notes ?? null,
+      },
+    }),
+  );
 
   return updatedProject;
 }
