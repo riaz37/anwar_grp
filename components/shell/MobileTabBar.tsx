@@ -6,7 +6,7 @@ import { isActiveHref, PRIMARY_NAV_ITEMS } from "./nav-items";
 
 /**
  * Mobile bottom bar — Home / My Work / Portfolio only. Management Dashboard
- * lives in the slide-out drawer (BUILD_PLAN.md Sec 5, decision 5).
+ * lives in the slide-out drawer (PROJECT_PLAN.md Sec 5, decision 5).
  */
 export function MobileTabBar() {
   const pathname = usePathname();

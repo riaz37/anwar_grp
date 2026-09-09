@@ -9,7 +9,7 @@ AI project stands, what's late, why it's late, who needs to act, and when
 it will ship — without asking anyone for a verbal update.
 
 For the full write-up (problem understanding, architecture decisions, data
-model, and build status) see **[`BUILD_PLAN.md`](./BUILD_PLAN.md)**. For
+model, and build status) see **[`PROJECT_PLAN.md`](./PROJECT_PLAN.md)**. For
 end-to-end QA results see **[`qa/SUMMARY.md`](./qa/SUMMARY.md)**. Visual
 design system: **[`DESIGN.md`](./DESIGN.md)**.
 
@@ -127,5 +127,5 @@ Deliberately **not** built (per assignment Sec 11): financial accounting,
 employee attendance, GitHub/source-code management, complex resource
 planning, full Jira/ERP functionality, autonomous AI agents, or push
 notifications (the dashboard/My Work/Home pages are pull-based by design —
-see `BUILD_PLAN.md` §3 #7 for the rationale). Known, flagged gaps are
+see `PROJECT_PLAN.md` §3 #7 for the rationale). Known, flagged gaps are
 tracked in [`TODOS.md`](./TODOS.md).

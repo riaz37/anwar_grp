@@ -24,7 +24,7 @@ export type NavItem = {
  * DESIGN.md > Layout.
  *
  * The client nav is a UX convenience, never the authorization boundary
- * (BUILD_PLAN.md Sec 2.5) — `visibleNavItems` only avoids showing links a
+ * (PROJECT_PLAN.md Sec 2.5) — `visibleNavItems` only avoids showing links a
  * role can't use; the server-side permission check is the real gate.
  */
 export const NAV_ITEMS: readonly NavItem[] = [

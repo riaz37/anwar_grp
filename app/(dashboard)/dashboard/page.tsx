@@ -72,6 +72,7 @@ export default async function ManagementDashboardPage() {
     stageCounts,
     healthCounts,
     expectedThisMonth,
+    expectedThisMonthTotal,
     upcomingMilestones,
     upcomingMilestoneTotal,
     overdueMilestones,
@@ -96,6 +97,10 @@ export default async function ManagementDashboardPage() {
         expectedDeliveryDate: true,
       },
       orderBy: { expectedDeliveryDate: "asc" },
+      take: MILESTONE_LIST_LIMIT,
+    }),
+    prisma.project.count({
+      where: { expectedDeliveryDate: { gte: startOfMonth, lt: startOfNextMonth } },
     }),
     prisma.milestone.findMany({
       where: upcomingWhere,
@@ -401,11 +406,15 @@ export default async function ManagementDashboardPage() {
         </Panel>
       </div>
 
-      {/* Needs attention pairs with Expected this month rather than Pipeline
-          by stage: both run a handful of rows at a similar width, so they
-          land close in height on their own. Pipeline by stage always renders
-          all nine stages — a fixed length nothing else here matches — so it
-          gets a row to itself instead of a mismatched partner. */}
+      {/* Grouped by row, not by topic: Needs attention and Overdue milestones
+          are both short, urgent lists, so they sit side by side and stay
+          close in height; Expected this month and Due in the next 7 days are
+          both longer date-ordered lists, so they pair below. Pairing by list
+          length (rather than e.g. project lists vs milestone lists) is what
+          keeps a short list from being stretched to match an eleven-row
+          neighbour. Pipeline by stage always renders all nine stages — a
+          fixed length nothing else here matches — so it gets a row to
+          itself. */}
       <div className="mt-ds-2xl grid grid-cols-1 items-start gap-ds-2xl lg:grid-cols-2">
         <Panel
           className="rise-in"
@@ -423,21 +432,6 @@ export default async function ManagementDashboardPage() {
 
         <Panel
           className="rise-in"
-          title="Expected this month"
-          meta={
-            expectedThisMonth.length > 0
-              ? `${expectedThisMonth.length} project${expectedThisMonth.length === 1 ? "" : "s"}`
-              : undefined
-          }
-          padded={false}
-        >
-          <DeliveryList projects={expectedThisMonth} />
-        </Panel>
-      </div>
-
-      <div className="mt-ds-2xl grid grid-cols-1 items-start gap-ds-2xl lg:grid-cols-2">
-        <Panel
-          className="rise-in"
           title="Overdue milestones"
           meta={listMeta(
             overdueMilestones.length,
@@ -452,6 +446,15 @@ export default async function ManagementDashboardPage() {
             now={now}
             emptyNote="Every open milestone is still inside its due date."
           />
+        </Panel>
+
+        <Panel
+          className="rise-in"
+          title="Expected this month"
+          meta={listMeta(expectedThisMonth.length, expectedThisMonthTotal, "project")}
+          padded={false}
+        >
+          <DeliveryList projects={expectedThisMonth} />
         </Panel>
 
         <Panel

@@ -7,7 +7,7 @@ import type { Role } from "@prisma/client";
 
 /**
  * Cookie name for the session token. Decision (not spelled out in
- * BUILD_PLAN.md): "tf_session". httpOnly + sameSite=lax + secure
+ * PROJECT_PLAN.md): "tf_session". httpOnly + sameSite=lax + secure
  * (secure only outside development, since local dev runs over http).
  */
 export const SESSION_COOKIE_NAME = "tf_session";
@@ -39,7 +39,7 @@ export async function verifyPassword(
 
 function generateSessionToken(): string {
   // 256 bits of entropy, hex-encoded. This is the actual Session.id —
-  // NOT a JWT, server-side lookup on every request per BUILD_PLAN.md
+  // NOT a JWT, server-side lookup on every request per PROJECT_PLAN.md
   // Sec 0 ("session carries role/departmentId/businessUnitId" — that
   // data is fetched fresh from the DB, never trusted from the token).
   return randomBytes(32).toString("hex");

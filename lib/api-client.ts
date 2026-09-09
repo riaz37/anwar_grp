@@ -49,7 +49,7 @@ function envelopeCode(error: ApiEnvelope<unknown>["error"]): string {
 /**
  * POSTs JSON and unwraps the envelope. Throws `ApiRequestError` on any
  * non-success response so callers can branch on `.status` (notably 409, the
- * optimistic-locking conflict — BUILD_PLAN.md Sec 2.4).
+ * optimistic-locking conflict — PROJECT_PLAN.md Sec 2.4).
  */
 export async function postJson<T>(
   path: string,

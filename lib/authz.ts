@@ -46,7 +46,7 @@ export async function requireAuth(): Promise<SessionPayload> {
  * Throws AuthzError(401) if unauthenticated, AuthzError(403) if the
  * current user's role is not in allowedRoles. This is the server-side
  * security boundary — the client's role-based navigation is a UX
- * convenience only (BUILD_PLAN.md Sec 2.5). Every mutating route
+ * convenience only (PROJECT_PLAN.md Sec 2.5). Every mutating route
  * handler under app/api/v1/** must call this (or requireAuth) before
  * doing anything else.
  */

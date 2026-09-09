@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AuthzError } from "./authz";
 
 /**
- * Standard API envelope per BUILD_PLAN.md Sec 2.4:
+ * Standard API envelope per PROJECT_PLAN.md Sec 2.4:
  * { success, data, error, meta } — meta carries pagination for list
  * endpoints (unused by the Phase 1 routes, reserved for later phases).
  */

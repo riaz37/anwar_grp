@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/primitives/button";
 
 /**
- * Envelope every `/api/v1/*` route returns (BUILD_PLAN.md Sec 2.4).
+ * Envelope every `/api/v1/*` route returns (PROJECT_PLAN.md Sec 2.4).
  * Mirrored locally rather than imported from `lib/api-response` — that module
  * pulls in `next/server` and Zod, which don't belong in a client bundle.
  */

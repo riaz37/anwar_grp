@@ -129,7 +129,7 @@ export async function presignUpload(
  * document row (and, via presign-upload, real file content) to a project
  * they aren't a participant on.
  *
- * BUILD_PLAN.md Sec 2.6: "download checks the requester's
+ * PROJECT_PLAN.md Sec 2.6: "download checks the requester's
  * authorization for the owning entity before issuing a presigned GET —
  * document access inherits the same break-glass/RBAC rules as the
  * record it belongs to."

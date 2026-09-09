@@ -13,7 +13,7 @@ export interface WriteAuditInput {
 /**
  * Append-only audit log write. This module deliberately exposes NO
  * update/delete function — AuditLog rows must be immutable per
- * BUILD_PLAN.md Sec 2.3 ("StageHistory and AuditLog are insert-only —
+ * PROJECT_PLAN.md Sec 2.3 ("StageHistory and AuditLog are insert-only —
  * no UPDATE/DELETE grant at the DB role level, enforcing 'permanent
  * audit record' at the data layer, not just by convention").
  *

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Shared list-endpoint pagination. `meta` shape matches BUILD_PLAN.md
+ * Shared list-endpoint pagination. `meta` shape matches PROJECT_PLAN.md
  * Sec 2.4 ("meta carries pagination for list endpoints").
  */
 export const paginationSchema = z.object({

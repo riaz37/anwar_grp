@@ -9,7 +9,7 @@ import { ok, fail, handleRouteError } from "@/lib/api-response";
  *
  * Authz: requires a logged-in user AND passes the owning entity's
  * pluggable authorization check (lib/documents.ts:isAuthorizedForDocumentOwner)
- * before ever issuing a presigned GET — per BUILD_PLAN.md Sec 2.6.
+ * before ever issuing a presigned GET — per PROJECT_PLAN.md Sec 2.6.
  * Since no owning module has registered a checker yet in Phase 1, this
  * currently fails closed (denies) for every ownerType until a later
  * module registers one.

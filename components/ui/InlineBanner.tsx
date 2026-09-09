@@ -13,7 +13,7 @@ import { TONE_PILL, type Tone } from "./tone";
 
 /**
  * Non-blocking inline message rendered *on the record it concerns* — the
- * treatment BUILD_PLAN.md Sec 5 decision #4 locks in for optimistic-locking
+ * treatment PROJECT_PLAN.md Sec 5 decision #4 locks in for optimistic-locking
  * conflicts, and reused for duplicate-record warnings.
  *
  * Deliberately not a modal: DESIGN.md's calm register plus the decision that a

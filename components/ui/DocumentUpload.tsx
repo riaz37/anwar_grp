@@ -113,7 +113,7 @@ export interface DocumentUploadProps {
 }
 
 /**
- * Upload control backed by the **real** presigned-URL flow (BUILD_PLAN.md
+ * Upload control backed by the **real** presigned-URL flow (PROJECT_PLAN.md
  * Sec 2.6: never a public bucket, never a DB blob):
  *
  *   1. `POST /api/v1/documents/presign-upload` gives `{ uploadUrl, storageKey }`
