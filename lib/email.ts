@@ -64,6 +64,46 @@ function getResendClient(): Resend | null {
   return resendClient;
 }
 
+const DEFAULT_FROM = "PMO Agent <alerts@resend.dev>";
+
+/**
+ * Sends `html` to each recipient individually (never a combined `to:`
+ * list, so recipients can't see each other's addresses) via Resend.
+ * Never throws — a missing RESEND_API_KEY or a per-recipient Resend
+ * failure is logged and swallowed so one bad address can't block the
+ * others, and callers (background jobs, agent tool calls) never fail
+ * their own work over email deliverability. Returns how many sends
+ * actually went out so callers that report back to a user/LLM can say so.
+ */
+async function sendEmailToEach(
+  subject: string,
+  recipients: Array<{ email: string; html: string }>,
+): Promise<number> {
+  if (recipients.length === 0) return 0;
+
+  const client = getResendClient();
+  if (!client) {
+    console.warn("RESEND_API_KEY not configured — skipping email send.");
+    return 0;
+  }
+
+  const from = process.env.ALERT_EMAIL_FROM ?? DEFAULT_FROM;
+
+  const results = await Promise.all(
+    recipients.map(async ({ email, html }) => {
+      try {
+        await client.emails.send({ from, to: [email], subject, html });
+        return true;
+      } catch (err) {
+        console.error(`Failed to send email to ${email}`, err);
+        return false;
+      }
+    }),
+  );
+
+  return results.filter(Boolean).length;
+}
+
 /**
  * Sends an immediate email alert for a newly-created AgentFlag — one send
  * per recipient, each personalized around that person's `relation` to the
@@ -72,36 +112,58 @@ function getResendClient(): Resend | null {
  * to a static role list. Recipient targeting itself lives in
  * app/api/internal/agent-monitor/route.ts (collectCandidates), which is
  * the only place that knows who's actually accountable for what.
- *
- * Never throws — a missing RESEND_API_KEY or a per-recipient Resend
- * failure is logged and swallowed so the monitoring loop's rule-based
- * flag writes (the governance-critical part) never depend on email
- * deliverability, and one bad recipient address can't block the others.
  */
 export async function sendFlagAlertEmail(input: FlagAlertEmailInput): Promise<void> {
-  if (input.recipients.length === 0) return;
+  await sendEmailToEach(
+    renderSubject(input),
+    input.recipients.map((recipient) => ({
+      email: recipient.email,
+      html: renderBody(input, recipient),
+    })),
+  );
+}
 
-  const client = getResendClient();
-  if (!client) {
-    console.warn("RESEND_API_KEY not configured — skipping flag alert email.");
-    return;
-  }
+export interface ProjectNotificationRecipient {
+  email: string;
+  name: string;
+}
 
-  const from = process.env.ALERT_EMAIL_FROM ?? "PMO Agent <alerts@resend.dev>";
-  const subject = renderSubject(input);
+export interface ProjectNotificationInput {
+  projectId: string;
+  projectName: string;
+  message: string;
+  senderName: string;
+  recipients: ProjectNotificationRecipient[];
+}
 
-  await Promise.all(
-    input.recipients.map(async (recipient) => {
-      try {
-        await client.emails.send({
-          from,
-          to: [recipient.email],
-          subject,
-          html: renderBody(input, recipient),
-        });
-      } catch (err) {
-        console.error(`Failed to send flag alert email to ${recipient.email}`, err);
-      }
-    }),
+function renderNotificationBody(
+  input: ProjectNotificationInput,
+  recipient: ProjectNotificationRecipient,
+): string {
+  const url = buildDashboardUrl(input.projectId);
+  return `
+    <p>Hi ${recipient.name},</p>
+    <p>${input.senderName} sent an update about <strong>${input.projectName}</strong> via the PMO Agent:</p>
+    <p>${input.message}</p>
+    <p><a href="${url}">Open project</a></p>
+  `.trim();
+}
+
+/**
+ * Sends a user-composed update about a project to a set of recipients —
+ * the PMO Agent chat's `notifyProjectStakeholders` tool (lib/agent-tools.ts)
+ * is the only caller, so recipient targeting/authorization lives there.
+ * Unlike sendFlagAlertEmail, `message` is free text from the requesting
+ * user (relayed through the LLM), not a rule-generated narration.
+ */
+export async function sendProjectNotificationEmail(
+  input: ProjectNotificationInput,
+): Promise<number> {
+  return sendEmailToEach(
+    `[PMO Agent] Update on ${input.projectName}`,
+    input.recipients.map((recipient) => ({
+      email: recipient.email,
+      html: renderNotificationBody(input, recipient),
+    })),
   );
 }

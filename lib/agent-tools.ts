@@ -1,11 +1,13 @@
 import "server-only";
 import { z } from "zod";
 import { tool } from "ai";
+import type { Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getProjectRaci, getOwnershipGaps, ProjectNotFoundError } from "./raci-engine";
 import { getProjectTimeline, type TimelineEntryType } from "./project-memory";
 import { isMilestoneOverdue } from "./project-health";
 import { isProjectParticipant, getAccessibleProjectIds } from "./project-authz";
+import { sendProjectNotificationEmail } from "./email";
 import type { SessionPayload } from "./session";
 
 export type AgentToolContext = SessionPayload;
@@ -287,12 +289,100 @@ export function createAgentTools(ctx: AgentToolContext) {
     },
   });
 
+  const AUDIENCE_VALUES = ["owner", "analyst", "developer", "team_lead", "management"] as const;
+  const AUDIENCE_ROLE: Partial<Record<(typeof AUDIENCE_VALUES)[number], Role>> = {
+    team_lead: "AI_TEAM_LEAD",
+    management: "MANAGEMENT",
+  };
+
+  const notifyProjectStakeholders = tool({
+    description:
+      "Send an email notifying people connected to a project about an update (e.g. it's paused, blocked, or its status changed). Only call this when the user explicitly asks to notify, email, or alert someone — never proactively just because you have news to share. `audience` picks who receives it: 'owner'/'analyst'/'developer' are the project's assigned people, 'team_lead' is the relevant AI team lead, 'management' is the Management group.",
+    inputSchema: z.object({
+      projectId: z.string().describe("The project's id."),
+      message: z
+        .string()
+        .min(1)
+        .describe("The update to send, in plain language, e.g. 'This project is paused pending budget approval.'"),
+      audience: z
+        .array(z.enum(AUDIENCE_VALUES))
+        .min(1)
+        .describe("Who to notify. Ask the user to clarify if they haven't said who."),
+    }),
+    execute: async ({ projectId, message, audience }) => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: { owner: true, analyst: true, developer: true },
+      });
+      if (!project || !isProjectParticipant(ctx, project)) {
+        return { sent: false, recipientCount: 0, recipients: [], reason: "Project not found or not accessible." };
+      }
+
+      const candidates: Array<{ email: string; name: string }> = [];
+      if (audience.includes("owner")) {
+        candidates.push({ email: project.owner.email, name: project.owner.name });
+      }
+      if (audience.includes("analyst") && project.analyst) {
+        candidates.push({ email: project.analyst.email, name: project.analyst.name });
+      }
+      if (audience.includes("developer") && project.developer) {
+        candidates.push({ email: project.developer.email, name: project.developer.name });
+      }
+
+      const roleAudience = audience
+        .map((a) => AUDIENCE_ROLE[a])
+        .filter((role): role is Role => role !== undefined);
+      if (roleAudience.length > 0) {
+        const users = await prisma.user.findMany({
+          where: {
+            isActive: true,
+            role: { in: roleAudience },
+            OR: [
+              { departmentId: project.departmentId },
+              { businessUnitId: project.businessUnitId },
+            ],
+          },
+          select: { email: true, name: true },
+        });
+        candidates.push(...users);
+      }
+
+      const recipients = Array.from(
+        new Map(candidates.map((c) => [c.email, c])).values(),
+      );
+
+      if (recipients.length === 0) {
+        return {
+          sent: false,
+          recipientCount: 0,
+          recipients: [],
+          reason: "No matching recipients found for the requested audience.",
+        };
+      }
+
+      const sentCount = await sendProjectNotificationEmail({
+        projectId: project.id,
+        projectName: project.name,
+        message,
+        senderName: ctx.name,
+        recipients,
+      });
+
+      return {
+        sent: sentCount > 0,
+        recipientCount: sentCount,
+        recipients: recipients.map((r) => r.name),
+      };
+    },
+  });
+
   return {
     getProjectStatus,
     getProjectRaci: getProjectRaciTool,
     listOpenFlags,
     getProjectTimeline: getProjectTimelineTool,
     searchDocuments,
+    notifyProjectStakeholders,
   };
 }
 
