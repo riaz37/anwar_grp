@@ -37,6 +37,12 @@ export function ProjectGanttPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // See ProjectTimelinePanel's identical guard: React 18 StrictMode's
+    // double-invoked effect aborts the first run's fetch, but its
+    // `.finally` still fires and would flip `loading` false before the
+    // second run's real fetch resolves. `ignore` keeps a stale run from
+    // touching state.
+    let ignore = false;
     setLoading(true);
     setError(null);
 
@@ -48,17 +54,23 @@ export function ProjectGanttPanel({ projectId }: { projectId: string }) {
         if (!response.ok || !envelope?.success || !envelope.data) {
           throw new Error(envelopeMessage(envelope?.error ?? null));
         }
-        setResult(envelope.data);
+        if (!ignore) setResult(envelope.data);
       })
       .catch((err: unknown) => {
+        if (ignore) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(
           err instanceof Error ? err.message : "Couldn’t load the Gantt timeline.",
         );
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
 
-    return () => controller.abort();
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
   }, [projectId]);
 
   return (

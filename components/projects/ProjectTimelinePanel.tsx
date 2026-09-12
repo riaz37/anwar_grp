@@ -75,14 +75,25 @@ export function ProjectTimelinePanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // React 18 StrictMode double-invokes this effect in dev: the first
+    // run's fetch is aborted by the cleanup below, but its `.finally`
+    // still fires (aborting rejects the promise, it doesn't cancel the
+    // callback chain) and would flip `loading` false before the second
+    // run's real fetch resolves — flashing "No events to show" ahead of
+    // the actual data. `ignore` guards every state setter so only the
+    // most recent effect run's promise can update state.
+    let ignore = false;
     setLoading(true);
     setError(null);
     getJson<TimelineEntryView[]>(
       `/api/v1/projects/${projectId}/timeline`,
       controller.signal,
     )
-      .then((data) => setEntries(data))
+      .then((data) => {
+        if (!ignore) setEntries(data);
+      })
       .catch((err) => {
+        if (ignore) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(
           err instanceof ApiRequestError
@@ -90,8 +101,13 @@ export function ProjectTimelinePanel({ projectId }: { projectId: string }) {
             : "Couldn’t load the project timeline.",
         );
       })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
   }, [projectId]);
 
   function toggleType(type: TimelineEntryType) {
