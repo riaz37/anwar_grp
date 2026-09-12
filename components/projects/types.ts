@@ -1,5 +1,6 @@
 import type {
   DelayReasonCategory,
+  DependencyItemType,
   MilestoneStatus,
   ProjectHealth,
   ProjectStage,
@@ -63,7 +64,16 @@ export interface TaskView {
   ownerName: string;
   deadline: string | null;
   status: TaskStatus;
+  progressPercent: number;
   relatedMilestoneId: string | null;
+}
+
+export interface ItemDependencyView {
+  id: string;
+  dependentType: DependencyItemType;
+  dependentId: string;
+  dependsOnType: DependencyItemType;
+  dependsOnId: string;
 }
 
 export interface BlockerView {

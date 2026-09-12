@@ -5,7 +5,7 @@ import { computeRiskSeverity } from "@/lib/risk-engine";
 import { getOwnershipGaps } from "@/lib/raci-engine";
 import { upsertFlag, autoResolveStaleFlags, type StillOpenSubject } from "@/lib/agent-flags";
 import { generateFlagNarration } from "@/lib/llm-client";
-import { sendFlagAlertEmail } from "@/lib/email";
+import { sendFlagAlertEmail, type FlagAlertRecipient } from "@/lib/email";
 import { ok, fail, handleRouteError } from "@/lib/api-response";
 
 /**
@@ -36,18 +36,73 @@ interface FlagCandidate {
   narrationPrompt: string;
   fallbackNarration: string;
   severity: number;
+  /** Who this specific flag should email, and why — resolved here since
+   * this is the only place that knows who's actually accountable for the
+   * flagged item, rather than the previous static "every Management +
+   * Team Lead" blast on every flag. */
+  recipients: FlagAlertRecipient[];
+}
+
+/** The subset of Project fields needed to target recipients and evaluate
+ * candidates — selected once per project in runAgentMonitor(). */
+interface MonitorProject {
+  id: string;
+  name: string;
+  departmentId: string;
+  businessUnitId: string;
+  owner: { email: string; name: string };
+}
+
+/** The subset of User fields needed to pick a project's relevant Team
+ * Lead or address Management — selected once per sweep in
+ * runAgentMonitor() rather than per project. */
+interface MonitorUser {
+  email: string;
+  name: string;
+  departmentId: string | null;
+  businessUnitId: string | null;
 }
 
 function daysOverdue(since: Date): number {
   return Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+/** Picks the Team Lead most relevant to a project: same department first,
+ * same business unit as a fallback, otherwise whoever's available — so a
+ * project always reaches a real person instead of silently dropping the
+ * "team lead" recipient when there's no exact department match. */
+function pickRelevantTeamLead(
+  project: Pick<MonitorProject, "departmentId" | "businessUnitId">,
+  teamLeads: MonitorUser[],
+): MonitorUser | null {
+  return (
+    teamLeads.find((u) => u.departmentId === project.departmentId) ??
+    teamLeads.find((u) => u.businessUnitId === project.businessUnitId) ??
+    teamLeads[0] ??
+    null
+  );
+}
+
+/** De-dupes recipients by email — a project owner who is also its own
+ * Team Lead (small teams) should get one email, not two. */
+function dedupeRecipients(recipients: FlagAlertRecipient[]): FlagAlertRecipient[] {
+  const byEmail = new Map<string, FlagAlertRecipient>();
+  for (const recipient of recipients) {
+    if (!byEmail.has(recipient.email)) byEmail.set(recipient.email, recipient);
+  }
+  return Array.from(byEmail.values());
+}
+
 async function collectCandidates(
-  projectId: string,
-  projectName: string,
+  project: MonitorProject,
+  teamLeads: MonitorUser[],
+  managers: MonitorUser[],
 ): Promise<FlagCandidate[]> {
+  const projectId = project.id;
+  const projectName = project.name;
   const now = Date.now();
   const candidates: FlagCandidate[] = [];
+  const teamLead = pickRelevantTeamLead(project, teamLeads);
 
   const [stuckMilestones, stuckBlockers, openRisks, ownershipGaps] = await Promise.all([
     prisma.milestone.findMany({
@@ -56,7 +111,7 @@ async function collectCandidates(
         status: { not: "DONE" },
         dueDate: { lt: new Date(now - STUCK_THRESHOLD_MS) },
       },
-      include: { owner: { select: { name: true } } },
+      include: { owner: { select: { name: true, email: true } } },
     }),
     prisma.blocker.findMany({
       where: {
@@ -64,7 +119,7 @@ async function collectCandidates(
         resolvedAt: null,
         dateIdentified: { lt: new Date(now - STUCK_THRESHOLD_MS) },
       },
-      include: { responsiblePerson: { select: { name: true } } },
+      include: { responsiblePerson: { select: { name: true, email: true } } },
     }),
     prisma.risk.findMany({
       where: {
@@ -72,7 +127,7 @@ async function collectCandidates(
         status: "OPEN",
         identifiedAt: { lt: new Date(now - HIGH_RISK_THRESHOLD_MS) },
       },
-      include: { owner: { select: { name: true } } },
+      include: { owner: { select: { name: true, email: true } } },
     }),
     getOwnershipGaps(projectId),
   ]);
@@ -85,6 +140,22 @@ async function collectCandidates(
       narrationPrompt: `Project "${projectName}" has milestone "${milestone.name}" (owned by ${milestone.owner.name}) that is ${overdueDays} days overdue. In 1-2 sentences, explain why this matters and recommend a next action.`,
       fallbackNarration: `"${milestone.name}" is ${overdueDays} days overdue, owned by ${milestone.owner.name}. No AI recommendation available — narration service unreachable.`,
       severity: 2,
+      recipients: dedupeRecipients([
+        {
+          email: milestone.owner.email,
+          name: milestone.owner.name,
+          relation: `You own the milestone "${milestone.name}" on ${projectName}, which is now ${overdueDays} days overdue.`,
+        },
+        ...(teamLead
+          ? [
+              {
+                email: teamLead.email,
+                name: teamLead.name,
+                relation: `A milestone on ${projectName}, in your team's portfolio, is ${overdueDays} days overdue: "${milestone.name}".`,
+              },
+            ]
+          : []),
+      ]),
     });
   }
 
@@ -96,6 +167,22 @@ async function collectCandidates(
       narrationPrompt: `Project "${projectName}" has an unresolved blocker ("${blocker.description}", responsible: ${blocker.responsiblePerson.name}) open for ${openDays} days. In 1-2 sentences, explain why this matters and recommend a next action.`,
       fallbackNarration: `Blocker "${blocker.description}" has been open for ${openDays} days, responsible: ${blocker.responsiblePerson.name}. No AI recommendation available — narration service unreachable.`,
       severity: 2,
+      recipients: dedupeRecipients([
+        {
+          email: blocker.responsiblePerson.email,
+          name: blocker.responsiblePerson.name,
+          relation: `You're responsible for the blocker "${blocker.description}" on ${projectName}, open for ${openDays} days.`,
+        },
+        ...(teamLead
+          ? [
+              {
+                email: teamLead.email,
+                name: teamLead.name,
+                relation: `A blocker on ${projectName}, in your team's portfolio, has been open for ${openDays} days: "${blocker.description}".`,
+              },
+            ]
+          : []),
+      ]),
     });
   }
 
@@ -108,6 +195,27 @@ async function collectCandidates(
       narrationPrompt: `Project "${projectName}" has an open high-severity risk: "${risk.title}" (likelihood: ${risk.likelihood}, impact: ${risk.impact}, owner: ${risk.owner.name}). In 1-2 sentences, explain why this matters and recommend a mitigation next step.`,
       fallbackNarration: `"${risk.title}" is an open ${risk.likelihood}/${risk.impact} risk, owned by ${risk.owner.name}. No AI recommendation available — narration service unreachable.`,
       severity,
+      recipients: dedupeRecipients([
+        {
+          email: risk.owner.email,
+          name: risk.owner.name,
+          relation: `You own the risk "${risk.title}" on ${projectName}, which has escalated to high severity (likelihood: ${risk.likelihood}, impact: ${risk.impact}).`,
+        },
+        ...(teamLead
+          ? [
+              {
+                email: teamLead.email,
+                name: teamLead.name,
+                relation: `A high-severity risk is open on ${projectName}, in your team's portfolio: "${risk.title}".`,
+              },
+            ]
+          : []),
+        ...managers.map((manager) => ({
+          email: manager.email,
+          name: manager.name,
+          relation: `A high-severity risk on ${projectName} needs executive visibility: "${risk.title}" (likelihood: ${risk.likelihood}, impact: ${risk.impact}).`,
+        })),
+      ]),
     });
   }
 
@@ -118,6 +226,22 @@ async function collectCandidates(
       narrationPrompt: `Project "${projectName}" has an ownership gap: ${gap.reason} In 1-2 sentences, explain why this matters and recommend a next action.`,
       fallbackNarration: `${gap.reason} No AI recommendation available — narration service unreachable.`,
       severity: 1,
+      recipients: dedupeRecipients([
+        {
+          email: project.owner.email,
+          name: project.owner.name,
+          relation: `As the owner of ${projectName}: ${gap.reason}`,
+        },
+        ...(teamLead
+          ? [
+              {
+                email: teamLead.email,
+                name: teamLead.name,
+                relation: `As the team lead over ${projectName}: ${gap.reason}`,
+              },
+            ]
+          : []),
+      ]),
     });
   }
 
@@ -167,10 +291,11 @@ interface ProjectEvalResult {
 }
 
 async function evaluateProject(
-  project: { id: string; name: string },
-  alertRecipients: Array<{ email: string; name: string }>,
+  project: MonitorProject,
+  teamLeads: MonitorUser[],
+  managers: MonitorUser[],
 ): Promise<ProjectEvalResult> {
-  const candidates = await collectCandidates(project.id, project.name);
+  const candidates = await collectCandidates(project, teamLeads, managers);
 
   let created = 0;
   let updated = 0;
@@ -220,7 +345,7 @@ async function evaluateProject(
         flagType: candidate.flagType,
         severity: candidate.severity,
         narration,
-        recipients: alertRecipients,
+        recipients: candidate.recipients,
       });
     } else {
       updated += 1;
@@ -255,20 +380,30 @@ const PROJECT_CONCURRENCY = 4;
  * over HTTP or needing the shared-secret header.
  */
 export async function runAgentMonitor(): Promise<AgentMonitorSummary> {
-  const [projects, alertRecipients] = await Promise.all([
+  const [projects, teamLeads, managers] = await Promise.all([
     prisma.project.findMany({
       where: { currentStage: { not: "COMPLETED" } },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        departmentId: true,
+        businessUnitId: true,
+        owner: { select: { email: true, name: true } },
+      },
     }),
     prisma.user.findMany({
-      where: { isActive: true, role: { in: ["MANAGEMENT", "AI_TEAM_LEAD"] } },
-      select: { email: true, name: true },
+      where: { isActive: true, role: "AI_TEAM_LEAD" },
+      select: { email: true, name: true, departmentId: true, businessUnitId: true },
+    }),
+    prisma.user.findMany({
+      where: { isActive: true, role: "MANAGEMENT" },
+      select: { email: true, name: true, departmentId: true, businessUnitId: true },
     }),
   ]);
 
   const results = await mapWithConcurrency(projects, PROJECT_CONCURRENCY, async (project) => {
     try {
-      return await evaluateProject(project, alertRecipients);
+      return await evaluateProject(project, teamLeads, managers);
     } catch (err) {
       // One project failing (e.g. deleted between the findMany above and
       // this call — a real TOCTOU window now that projects are evaluated

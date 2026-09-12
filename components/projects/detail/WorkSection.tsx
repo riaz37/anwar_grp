@@ -24,7 +24,13 @@ import {
   TASK_STATUS_LABELS,
   TASK_STATUS_TONE,
 } from "../projectTone";
-import type { DelayReasonView, MilestoneView, RefUser, TaskView } from "../types";
+import type {
+  DelayReasonView,
+  ItemDependencyView,
+  MilestoneView,
+  RefUser,
+  TaskView,
+} from "../types";
 import {
   Block,
   Empty,
@@ -36,6 +42,7 @@ import {
   RowList,
   Subhead,
 } from "./chrome";
+import { DependencyPicker, type DependencyCandidate } from "./DependencyPicker";
 
 const DELAY_REASON_OPTIONS = Object.entries(DELAY_REASON_LABELS).map(
   ([value, label]) => ({ value, label }),
@@ -113,6 +120,7 @@ export function WorkSection({
   projectId,
   milestones,
   tasks,
+  dependencies,
   delayReasons,
   users,
   currentUserRole,
@@ -121,6 +129,7 @@ export function WorkSection({
   projectId: string;
   milestones: MilestoneView[];
   tasks: TaskView[];
+  dependencies: ItemDependencyView[];
   delayReasons: unknown;
   users: RefUser[];
   currentUserRole: Role;
@@ -131,7 +140,18 @@ export function WorkSection({
     "MANAGE_MILESTONES",
   );
   const canUpdateTask = hasProjectPermission(currentUserRole, "UPDATE_TASK");
+  const canManageDependencies = hasProjectPermission(
+    currentUserRole,
+    "MANAGE_DEPENDENCIES",
+  );
   const userOptions = users.map((u) => ({ value: u.id, label: u.name }));
+
+  // Every milestone and task is a candidate predecessor for every other one
+  // — the dependency picker excludes an item from its own candidate list.
+  const dependencyCandidates: DependencyCandidate[] = [
+    ...milestones.map((m) => ({ id: m.id, type: "MILESTONE" as const, label: m.name })),
+    ...tasks.map((t) => ({ id: t.id, type: "TASK" as const, label: t.action })),
+  ];
 
   return (
     <div className="flex flex-col gap-ds-9xl">
@@ -141,6 +161,9 @@ export function WorkSection({
         delayReasons={toDelayReasons(delayReasons)}
         userOptions={userOptions}
         canManage={canManageMilestones}
+        canManageDependencies={canManageDependencies}
+        dependencies={dependencies}
+        dependencyCandidates={dependencyCandidates}
         onChanged={onChanged}
       />
       <TasksBlock
@@ -149,6 +172,9 @@ export function WorkSection({
         milestones={milestones}
         userOptions={userOptions}
         canUpdate={canUpdateTask}
+        canManageDependencies={canManageDependencies}
+        dependencies={dependencies}
+        dependencyCandidates={dependencyCandidates}
         onChanged={onChanged}
       />
     </div>
@@ -161,6 +187,9 @@ function MilestonesBlock({
   delayReasons,
   userOptions,
   canManage,
+  canManageDependencies,
+  dependencies,
+  dependencyCandidates,
   onChanged,
 }: {
   projectId: string;
@@ -168,6 +197,9 @@ function MilestonesBlock({
   delayReasons: DelayReasonView[];
   userOptions: { value: string; label: string }[];
   canManage: boolean;
+  canManageDependencies: boolean;
+  dependencies: ItemDependencyView[];
+  dependencyCandidates: DependencyCandidate[];
   onChanged: () => void;
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -470,6 +502,21 @@ function MilestonesBlock({
                 tone={MILESTONE_STATUS_TONE[m.status]}
                 label={MILESTONE_STATUS_LABELS[m.status]}
               />
+              {canManageDependencies && (
+                <DependencyPicker
+                  candidates={dependencyCandidates.filter(
+                    (c) => !(c.type === "MILESTONE" && c.id === m.id),
+                  )}
+                  currentEdges={dependencies.filter(
+                    (d) => d.dependentType === "MILESTONE" && d.dependentId === m.id,
+                  )}
+                  itemId={m.id}
+                  itemLabel={m.name}
+                  itemType="MILESTONE"
+                  onChanged={onChanged}
+                  projectId={projectId}
+                />
+              )}
               {canManage && m.status !== "DONE" && (
                 <RowStatusSelect
                   label={`Update status for ${m.name}`}
@@ -523,6 +570,9 @@ function TasksBlock({
   milestones,
   userOptions,
   canUpdate,
+  canManageDependencies,
+  dependencies,
+  dependencyCandidates,
   onChanged,
 }: {
   projectId: string;
@@ -530,6 +580,9 @@ function TasksBlock({
   milestones: MilestoneView[];
   userOptions: { value: string; label: string }[];
   canUpdate: boolean;
+  canManageDependencies: boolean;
+  dependencies: ItemDependencyView[];
+  dependencyCandidates: DependencyCandidate[];
   onChanged: () => void;
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -610,6 +663,21 @@ function TasksBlock({
     } catch (err) {
       setError(
         err instanceof ApiRequestError ? err.message : "Couldn’t update the task.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function updateProgress(taskId: string, progressPercent: number) {
+    setError(null);
+    setBusyId(taskId);
+    try {
+      await patchJson(`/api/v1/projects/${projectId}/tasks/${taskId}`, { progressPercent });
+      onChanged();
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.message : "Couldn’t update progress.",
       );
     } finally {
       setBusyId(null);
@@ -739,6 +807,42 @@ function TasksBlock({
                 tone={TASK_STATUS_TONE[t.status]}
                 label={TASK_STATUS_LABELS[t.status]}
               />
+              {canUpdate && (
+                <label className="flex items-center gap-ds-xs text-caption-2 text-text-low">
+                  Progress
+                  <input
+                    aria-label={`Progress for ${t.action}`}
+                    className="h-8 w-16 rounded-md border border-outline-med bg-surface-2 px-ds-sm text-caption-2 text-text-high disabled:cursor-progress disabled:opacity-60"
+                    defaultValue={t.progressPercent}
+                    disabled={busyId === t.id}
+                    max={100}
+                    min={0}
+                    onBlur={(event) => {
+                      const next = Number(event.currentTarget.value);
+                      if (Number.isNaN(next) || next === t.progressPercent) return;
+                      updateProgress(t.id, Math.min(100, Math.max(0, Math.round(next))));
+                    }}
+                    step={5}
+                    type="number"
+                  />
+                  %
+                </label>
+              )}
+              {canManageDependencies && (
+                <DependencyPicker
+                  candidates={dependencyCandidates.filter(
+                    (c) => !(c.type === "TASK" && c.id === t.id),
+                  )}
+                  currentEdges={dependencies.filter(
+                    (d) => d.dependentType === "TASK" && d.dependentId === t.id,
+                  )}
+                  itemId={t.id}
+                  itemLabel={t.action}
+                  itemType="TASK"
+                  onChanged={onChanged}
+                  projectId={projectId}
+                />
+              )}
               {canUpdate && t.status !== "DONE" && (
                 <RowStatusSelect
                   label={`Update status for ${t.action}`}

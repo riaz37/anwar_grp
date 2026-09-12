@@ -101,6 +101,12 @@ function envelopeMessage(error: ApiErrorShape | string | null): string {
   return error.message || "Couldn’t load the Gantt timeline.";
 }
 
+/** Fixed row height so the connector-line SVG overlay can compute each
+ *  row's Y position without measuring the DOM. Rows that wrap onto a
+ *  second line on very narrow screens will sit slightly off from their
+ *  connector — an accepted trade-off for not needing a ResizeObserver. */
+const ROW_HEIGHT_PX = 56;
+
 function GanttTimeline({ result }: { result: CriticalPathResult }) {
   const dated = result.items.filter((item) => item.date !== null);
   const undated = result.items.filter((item) => item.date === null);
@@ -134,8 +140,46 @@ function GanttTimeline({ result }: { result: CriticalPathResult }) {
   const sorted = [...dated].sort(
     (a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime(),
   );
+  const rowIndexById = new Map(sorted.map((item, index) => [item.id, index]));
+  const itemById = new Map(result.items.map((item) => [item.id, item]));
 
   const deliveryPosition = position(result.expectedDeliveryDate);
+
+  const rows = sorted.map((item) => {
+    const datedPredecessors = item.dependsOnIds
+      .map((depId) => itemById.get(depId))
+      .filter((dep): dep is CriticalPathItem => dep !== undefined && dep.date !== null);
+    const endPercent = clampPercent(position(item.date as string));
+    const startPercent =
+      datedPredecessors.length > 0
+        ? clampPercent(Math.max(...datedPredecessors.map((dep) => position(dep.date as string))))
+        : clampPercent(endPercent - 2);
+    return { item, startPercent, endPercent };
+  });
+
+  /** One elbow connector per dependency edge whose predecessor is also
+   *  dated, drawn from the predecessor's end marker to this item's start
+   *  marker. Accent-colored only when both ends sit on the critical path. */
+  const connectors = rows.flatMap(({ item, startPercent }) => {
+    const toIndex = rowIndexById.get(item.id);
+    if (toIndex === undefined) return [];
+    return item.dependsOnIds.flatMap((depId) => {
+      const fromIndex = rowIndexById.get(depId);
+      const predecessor = itemById.get(depId);
+      if (fromIndex === undefined || !predecessor || predecessor.date === null) return [];
+      const fromX = clampPercent(position(predecessor.date));
+      const fromY = fromIndex * ROW_HEIGHT_PX + ROW_HEIGHT_PX / 2;
+      const toY = toIndex * ROW_HEIGHT_PX + ROW_HEIGHT_PX / 2;
+      const midX = (fromX + startPercent) / 2;
+      return [
+        {
+          key: `${depId}->${item.id}`,
+          d: `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${startPercent} ${toY}`,
+          accent: item.isCriticalPath && predecessor.isCriticalPath,
+        },
+      ];
+    });
+  });
 
   return (
     <div className="flex flex-col gap-ds-2xl">
@@ -153,23 +197,36 @@ function GanttTimeline({ result }: { result: CriticalPathResult }) {
           />
         </div>
 
-        <ol className="mt-ds-md flex flex-col gap-ds-md">
-          {sorted.map((item) => (
-            <GanttRow
-              key={item.id}
-              item={item}
-              startPercent={clampPercent(
-                item.dependsOnId
-                  ? position(
-                      result.items.find((n) => n.id === item.dependsOnId)?.date ??
-                        (item.date as string),
-                    )
-                  : position(item.date as string) - 2,
-              )}
-              endPercent={clampPercent(position(item.date as string))}
-            />
-          ))}
-        </ol>
+        <div className="relative mt-ds-md" style={{ height: rows.length * ROW_HEIGHT_PX }}>
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full"
+            preserveAspectRatio="none"
+            viewBox={`0 0 100 ${rows.length * ROW_HEIGHT_PX}`}
+          >
+            {connectors.map((connector) => (
+              <path
+                className={connector.accent ? "stroke-primary-med" : "stroke-outline-base"}
+                d={connector.d}
+                fill="none"
+                key={connector.key}
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+
+          <ol className="relative z-10 flex flex-col">
+            {rows.map(({ item, startPercent, endPercent }) => (
+              <GanttRow
+                endPercent={endPercent}
+                item={item}
+                key={item.id}
+                startPercent={startPercent}
+              />
+            ))}
+          </ol>
+        </div>
       </Card>
 
       {undated.length > 0 && (
@@ -206,9 +263,15 @@ function GanttRow({
 }) {
   const barLeft = Math.min(startPercent, endPercent);
   const barWidth = Math.max(endPercent - startPercent, 0.75);
+  // Milestone status is binary (done or not), so only tasks get a partial
+  // fill — a milestone's single bar already communicates its state.
+  const fillWidth =
+    item.type === "TASK" && item.progressPercent !== null
+      ? barWidth * (item.progressPercent / 100)
+      : null;
 
   return (
-    <li className="flex flex-wrap items-center gap-ds-md">
+    <li className="flex flex-wrap items-center gap-ds-md" style={{ height: ROW_HEIGHT_PX }}>
       <div className="flex w-full items-center gap-ds-md sm:w-56 sm:shrink-0">
         <Monogram name={item.ownerName} />
         <div className="min-w-0 flex-1">
@@ -231,12 +294,23 @@ function GanttRow({
         <div
           className={
             "absolute top-1/2 h-2 -translate-y-1/2 rounded-pill " +
-            (item.isCriticalPath
-              ? "bg-primary-med shadow-primary-button"
-              : "bg-surface-4")
+            (fillWidth !== null
+              ? "bg-surface-4"
+              : item.isCriticalPath
+                ? "bg-primary-med shadow-primary-button"
+                : "bg-surface-4")
           }
           style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
         />
+        {fillWidth !== null && (
+          <div
+            className={
+              "absolute top-1/2 h-2 -translate-y-1/2 rounded-pill " +
+              (item.isCriticalPath ? "bg-primary-med shadow-primary-button" : "bg-text-low")
+            }
+            style={{ left: `${barLeft}%`, width: `${fillWidth}%` }}
+          />
+        )}
         <div
           className={
             "absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-0 " +

@@ -846,6 +846,8 @@ async function main() {
   const claimsProject = projectsByName["Claims Intake Automation"];
   const claimsMilestones = milestonesByName["Claims Intake Automation"];
   const forecastProject = projectsByName["Cement Demand Forecasting Engine"];
+  const invoiceProject = projectsByName["Invoice OCR & 3-Way Match"];
+  const furnaceProject = projectsByName["Furnace Energy Optimization Model"];
 
   const openRisk = await prisma.risk.create({
     data: {
@@ -904,7 +906,33 @@ async function main() {
     },
   });
 
-  console.log("Seeded 1 open risk, 1 resolved risk, 2 project stakeholders, and 1 agent flag.");
+  // Both are genuine NO_CONSULTED_OR_INFORMED gaps (lib/raci-engine.ts): APPROVAL-stage
+  // projects with zero Consulted/Informed stakeholders. Seeded directly as AgentFlags —
+  // matching the fallback narration the monitor cron itself would produce — since the
+  // Management Dashboard's Ownership panel only ever reads open OWNERSHIP_GAP flags,
+  // never recomputes gaps live, and the cron hasn't swept this fixture yet.
+  await prisma.agentFlag.create({
+    data: {
+      projectId: invoiceProject.id,
+      flagType: "OWNERSHIP_GAP",
+      subjectId: invoiceProject.id,
+      narration: "No Consulted or Informed stakeholders while the project is in APPROVAL. No AI recommendation available — narration service unreachable.",
+      narrationSource: "RULE_FALLBACK",
+      severity: 1,
+    },
+  });
+  await prisma.agentFlag.create({
+    data: {
+      projectId: furnaceProject.id,
+      flagType: "OWNERSHIP_GAP",
+      subjectId: furnaceProject.id,
+      narration: "No Consulted or Informed stakeholders while the project is in APPROVAL. No AI recommendation available — narration service unreachable.",
+      narrationSource: "RULE_FALLBACK",
+      severity: 1,
+    },
+  });
+
+  console.log("Seeded 1 open risk, 1 resolved risk, 2 project stakeholders, and 3 agent flags.");
 }
 
 main()

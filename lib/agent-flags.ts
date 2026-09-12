@@ -12,12 +12,16 @@ export interface UpsertFlagParams {
 }
 
 /**
- * Throttled write for the monitoring loop: one open row per
+ * Throttled write for the monitoring loop: one row per
  * (projectId, flagType, subjectId) — enforced by the @@unique
- * constraint on AgentFlag. Creates the row if absent; if an open row
- * already exists, only narration/severity/lastEvaluatedAt are
- * refreshed — resolvedAt is never touched here (see
- * autoResolveStaleFlags for that).
+ * constraint on AgentFlag. Creates the row if absent; if a row already
+ * exists, narration/severity/lastEvaluatedAt are refreshed and
+ * resolvedAt/resolutionReason are cleared — the caller only reaches
+ * upsertFlag for a condition it just detected as still (or newly
+ * again) active, so a prior resolution must not linger on the row.
+ * Without this, a flag that reopens after being auto-resolved (see
+ * autoResolveStaleFlags) would keep showing resolvedAt set even while
+ * its email alert correctly fires for the new occurrence.
  */
 export async function upsertFlag(params: UpsertFlagParams): Promise<AgentFlag> {
   return prisma.agentFlag.upsert({
@@ -41,6 +45,8 @@ export async function upsertFlag(params: UpsertFlagParams): Promise<AgentFlag> {
       narrationSource: params.narrationSource,
       severity: params.severity,
       lastEvaluatedAt: new Date(),
+      resolvedAt: null,
+      resolutionReason: null,
     },
   });
 }

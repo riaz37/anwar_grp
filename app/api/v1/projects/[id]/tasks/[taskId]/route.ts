@@ -12,6 +12,7 @@ const updateTaskSchema = z.object({
   ownerId: z.string().min(1).optional(),
   deadline: z.coerce.date().nullable().optional(),
   status: z.nativeEnum(TaskStatus).optional(),
+  progressPercent: z.number().int().min(0).max(100).optional(),
   relatedMilestoneId: z.string().min(1).nullable().optional(),
 });
 
@@ -54,6 +55,7 @@ export async function PATCH(
         ...(body.ownerId !== undefined && { ownerId: body.ownerId }),
         ...(body.deadline !== undefined && { deadline: body.deadline }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.progressPercent !== undefined && { progressPercent: body.progressPercent }),
         ...(body.relatedMilestoneId !== undefined && {
           relatedMilestoneId: body.relatedMilestoneId,
         }),

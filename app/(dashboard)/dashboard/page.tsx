@@ -14,6 +14,7 @@ import {
   ScheduleBoard,
   type ScheduleRow,
 } from "@/components/dashboard/portfolio/ScheduleBoard";
+import { AgentMonitorTriggerButton } from "@/components/dashboard/portfolio/AgentMonitorTriggerButton";
 
 export const metadata: Metadata = { title: "Management Dashboard" };
 export const dynamic = "force-dynamic";
@@ -162,6 +163,7 @@ export default async function ManagementDashboardPage() {
           <p className="font-data text-caption-2 tabular-nums text-text-low">
             As of {asOf}
           </p>
+          <AgentMonitorTriggerButton />
           <ButtonLink href="/projects" variant="secondary">
             Full portfolio
           </ButtonLink>

@@ -227,6 +227,7 @@ model Project {
   delayReasons       DelayReason[]
   risks              Risk[]
   stakeholders       ProjectStakeholder[]
+  itemDependencies   ItemDependency[]
   agentFlags         AgentFlag[]
 
   @@index([businessUnitId, departmentId])
@@ -327,6 +328,7 @@ model ProjectTask {
   owner              User       @relation("TaskOwner", fields: [ownerId], references: [id])
   deadline           DateTime?
   status             TaskStatus @default(PENDING)
+  progressPercent    Int        @default(0)
   relatedMilestoneId String?
   relatedMilestone   Milestone? @relation(fields: [relatedMilestoneId], references: [id])
   createdAt          DateTime   @default(now())
@@ -512,6 +514,32 @@ model ProjectStakeholder {
   @@unique([projectId, userId, raciRole])
   @@index([projectId])
   @@map("project_stakeholders")
+}
+
+enum DependencyItemType {
+  MILESTONE
+  TASK
+}
+
+// Polymorphic predecessor edge: dependentX is blocked on dependsOnX. No DB FK
+// on dependentId/dependsOnId — Prisma has no polymorphic relation support, so
+// both sides are validated at the application layer (lib/dependency-graph.ts):
+// same project, item exists, no self-loop, no cycle. lib/critical-path.ts
+// walks this table as a DAG instead of chaining items by date order.
+model ItemDependency {
+  id            String             @id @default(cuid())
+  projectId     String
+  project       Project            @relation(fields: [projectId], references: [id])
+  dependentType DependencyItemType
+  dependentId   String
+  dependsOnType DependencyItemType
+  dependsOnId   String
+  createdAt     DateTime           @default(now())
+
+  @@unique([dependentType, dependentId, dependsOnType, dependsOnId])
+  @@index([projectId])
+  @@index([dependentType, dependentId])
+  @@map("item_dependencies")
 }
 
 enum AgentFlagType {

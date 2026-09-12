@@ -19,6 +19,7 @@ import type {
   ChecklistItemView,
   DelayReasonView,
   DocumentView,
+  ItemDependencyView,
   MilestoneView,
   ProjectDetail,
   RefUser,
@@ -84,6 +85,7 @@ export function ProjectDetailView({
   stageHistory,
   milestones,
   tasks,
+  dependencies,
   blockers,
   scopeChanges,
   delayReasons,
@@ -102,6 +104,7 @@ export function ProjectDetailView({
   stageHistory: StageHistoryView[];
   milestones: MilestoneView[];
   tasks: TaskView[];
+  dependencies: ItemDependencyView[];
   blockers: BlockerView[];
   scopeChanges: ScopeChangeView[];
   delayReasons: DelayReasonView[];
@@ -256,6 +259,7 @@ export function ProjectDetailView({
               projectId={project.id}
               milestones={milestones}
               tasks={tasks}
+              dependencies={dependencies}
               delayReasons={delayReasons}
               users={users}
               currentUserRole={currentUserRole}

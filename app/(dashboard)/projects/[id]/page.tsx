@@ -71,6 +71,7 @@ export default async function ProjectWorkspacePage({
       department: { select: { id: true, name: true } },
       milestones: { orderBy: { dueDate: "asc" }, include: { owner: { select: { id: true, name: true } } } },
       tasks: { orderBy: { deadline: "asc" }, include: { owner: { select: { id: true, name: true } } } },
+      itemDependencies: true,
       blockers: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -215,7 +216,15 @@ export default async function ProjectWorkspacePage({
         ownerName: t.owner.name,
         deadline: t.deadline ? t.deadline.toISOString() : null,
         status: t.status,
+        progressPercent: t.progressPercent,
         relatedMilestoneId: t.relatedMilestoneId,
+      }))}
+      dependencies={project.itemDependencies.map((d) => ({
+        id: d.id,
+        dependentType: d.dependentType,
+        dependentId: d.dependentId,
+        dependsOnType: d.dependsOnType,
+        dependsOnId: d.dependsOnId,
       }))}
       blockers={project.blockers.map((b) => ({
         id: b.id,

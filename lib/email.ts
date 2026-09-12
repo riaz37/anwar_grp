@@ -9,13 +9,26 @@ const FLAG_TYPE_LABELS: Record<AgentFlagType, string> = {
   OWNERSHIP_GAP: "Ownership gap",
 };
 
+/**
+ * A single recipient of a flag alert, with `relation` explaining — in
+ * that person's own terms — why *they* are getting this email (e.g. "You
+ * own this milestone" vs. "You lead the team behind this project"). Set
+ * per recipient by the caller in app/api/internal/agent-monitor/route.ts,
+ * which knows each person's relationship to the flagged item.
+ */
+export interface FlagAlertRecipient {
+  email: string;
+  name: string;
+  relation: string;
+}
+
 export interface FlagAlertEmailInput {
   projectId: string;
   projectName: string;
   flagType: AgentFlagType;
   severity: number;
   narration: string;
-  recipients: Array<{ email: string; name: string }>;
+  recipients: FlagAlertRecipient[];
 }
 
 function buildDashboardUrl(projectId: string): string {
@@ -27,11 +40,13 @@ function renderSubject(input: FlagAlertEmailInput): string {
   return `[PMO Agent] ${FLAG_TYPE_LABELS[input.flagType]} — ${input.projectName}`;
 }
 
-function renderBody(input: FlagAlertEmailInput): string {
+function renderBody(input: FlagAlertEmailInput, recipient: FlagAlertRecipient): string {
   const url = buildDashboardUrl(input.projectId);
   return `
-    <p>The PMO monitoring agent flagged a new issue on <strong>${input.projectName}</strong>.</p>
-    <p><strong>Type:</strong> ${FLAG_TYPE_LABELS[input.flagType]}<br/>
+    <p>Hi ${recipient.name},</p>
+    <p>${recipient.relation}</p>
+    <p><strong>Project:</strong> ${input.projectName}<br/>
+    <strong>Type:</strong> ${FLAG_TYPE_LABELS[input.flagType]}<br/>
     <strong>Severity:</strong> ${input.severity}/3</p>
     <p>${input.narration}</p>
     <p><a href="${url}">Open project</a></p>
@@ -50,15 +65,18 @@ function getResendClient(): Resend | null {
 }
 
 /**
- * Sends an immediate email alert for a newly-created AgentFlag. This is a
- * deliberate reversal of PROJECT_PLAN.md item 7's original pull-only
- * notification decision, made explicitly by the user (see
- * AGENTIC_DASHBOARD_PLAN.md "Decision 4, updated"): the monitor now pushes
- * an email per new flag instead of only surfacing it in-app.
+ * Sends an immediate email alert for a newly-created AgentFlag — one send
+ * per recipient, each personalized around that person's `relation` to the
+ * flagged item (project owner, the specific milestone/blocker/risk owner,
+ * their team lead, or Management) rather than one generic email blasted
+ * to a static role list. Recipient targeting itself lives in
+ * app/api/internal/agent-monitor/route.ts (collectCandidates), which is
+ * the only place that knows who's actually accountable for what.
  *
- * Never throws — a missing RESEND_API_KEY or a Resend API failure is
- * logged and swallowed so the monitoring loop's rule-based flag writes
- * (the governance-critical part) never depend on email deliverability.
+ * Never throws — a missing RESEND_API_KEY or a per-recipient Resend
+ * failure is logged and swallowed so the monitoring loop's rule-based
+ * flag writes (the governance-critical part) never depend on email
+ * deliverability, and one bad recipient address can't block the others.
  */
 export async function sendFlagAlertEmail(input: FlagAlertEmailInput): Promise<void> {
   if (input.recipients.length === 0) return;
@@ -70,15 +88,20 @@ export async function sendFlagAlertEmail(input: FlagAlertEmailInput): Promise<vo
   }
 
   const from = process.env.ALERT_EMAIL_FROM ?? "PMO Agent <alerts@resend.dev>";
+  const subject = renderSubject(input);
 
-  try {
-    await client.emails.send({
-      from,
-      to: input.recipients.map((r) => r.email),
-      subject: renderSubject(input),
-      html: renderBody(input),
-    });
-  } catch (err) {
-    console.error("Failed to send flag alert email", err);
-  }
+  await Promise.all(
+    input.recipients.map(async (recipient) => {
+      try {
+        await client.emails.send({
+          from,
+          to: [recipient.email],
+          subject,
+          html: renderBody(input, recipient),
+        });
+      } catch (err) {
+        console.error(`Failed to send flag alert email to ${recipient.email}`, err);
+      }
+    }),
+  );
 }

@@ -81,6 +81,7 @@ export async function cleanupFixtureOrg(org: Awaited<ReturnType<typeof createFix
   const projectIds = projects.map((p) => p.id);
 
   if (projectIds.length > 0) {
+    await prisma.itemDependency.deleteMany({ where: { projectId: { in: projectIds } } });
     await prisma.riskEvent.deleteMany({ where: { risk: { projectId: { in: projectIds } } } });
     await prisma.risk.deleteMany({ where: { projectId: { in: projectIds } } });
     await prisma.projectStakeholder.deleteMany({ where: { projectId: { in: projectIds } } });
