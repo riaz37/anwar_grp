@@ -1,5 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
 import {
+  ChatIcon,
   HomeIcon,
   ProjectsIcon,
   ReportsIcon,
@@ -20,8 +21,8 @@ export type NavItem = {
 
 /**
  * Primary navigation for Anwar AI ProjectFlow: Home, My Work (role-scoped
- * assignments), Portfolio (all projects), and Management Dashboard. See
- * DESIGN.md > Layout.
+ * assignments), Portfolio (all projects), Management Dashboard, and the PMO
+ * agent Chat. See DESIGN.md > Layout.
  *
  * The client nav is a UX convenience, never the authorization boundary
  * (PROJECT_PLAN.md Sec 2.5) — `visibleNavItems` only avoids showing links a
@@ -35,6 +36,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Management Dashboard",
     href: "/dashboard",
     icon: ReportsIcon,
+    restricted: true,
+  },
+  {
+    label: "Chat",
+    href: "/chat",
+    icon: ChatIcon,
     restricted: true,
   },
 ] as const;

@@ -562,6 +562,10 @@ function stageHistoryDates(stageIndex: number, started: number, arrived: number)
 async function main() {
   // Wipe project-domain + org/auth data so the script is safely re-runnable
   // against a fresh or previously-seeded database. Order respects FKs.
+  await prisma.agentFlag.deleteMany();
+  await prisma.riskEvent.deleteMany();
+  await prisma.risk.deleteMany();
+  await prisma.projectStakeholder.deleteMany();
   await prisma.delayReason.deleteMany();
   await prisma.scopeChange.deleteMany();
   await prisma.blocker.deleteMany();
@@ -613,6 +617,8 @@ async function main() {
   // --- Projects ---
   let docCount = 0;
   let auditCount = 0;
+  const projectsByName: Record<string, { id: string }> = {};
+  const milestonesByName: Record<string, string[]> = {};
 
   for (const spec of PROJECTS) {
     const stageIndex = STAGE_ORDER.indexOf(spec.stage);
@@ -829,9 +835,76 @@ async function main() {
         },
       });
     }
+
+    projectsByName[spec.name] = project;
+    milestonesByName[spec.name] = milestoneIds;
   }
 
   console.log(`Seeded ${PROJECTS.length} projects spanning all 10 stages, ${docCount} documents, ${auditCount} audit log entries.`);
+
+  // --- Risks, RACI stakeholders, agent flags (AGENTIC_DASHBOARD_PLAN.md Group A) ---
+  const claimsProject = projectsByName["Claims Intake Automation"];
+  const claimsMilestones = milestonesByName["Claims Intake Automation"];
+  const forecastProject = projectsByName["Cement Demand Forecasting Engine"];
+
+  const openRisk = await prisma.risk.create({
+    data: {
+      projectId: claimsProject.id,
+      title: "OCR vendor sandbox outage risk",
+      description: "The claims-vendor OCR sandbox has had two brief outages this month; a sustained outage during UAT would stall the pipeline milestone entirely.",
+      likelihood: "HIGH",
+      impact: "MEDIUM",
+      status: "OPEN",
+      mitigationPlan: "Negotiate an SLA with the vendor and stand up a fallback manual-review queue.",
+      ownerId: users[TL].id,
+      raisedById: users[A].id,
+    },
+  });
+  await prisma.riskEvent.create({
+    data: { riskId: openRisk.id, fromStatus: null, toStatus: "OPEN", actorId: users[A].id, note: "Risk raised after second sandbox outage this month." },
+  });
+
+  const resolvedRisk = await prisma.risk.create({
+    data: {
+      projectId: forecastProject.id,
+      title: "Seasonal-demand data gap for new SKUs",
+      description: "Newly launched SKUs lacked 12 months of history, risking a poor backtest fit.",
+      likelihood: "MEDIUM",
+      impact: "LOW",
+      status: "RESOLVED",
+      mitigationPlan: "Backfilled with category-level proxy demand until 12 months of real history accrues.",
+      ownerId: users[D2].id,
+      raisedById: users[A].id,
+      resolvedAt: addDays(-3),
+    },
+  });
+  await prisma.riskEvent.create({
+    data: { riskId: resolvedRisk.id, fromStatus: null, toStatus: "OPEN", actorId: users[A].id, note: "Risk raised during feature pipeline build." },
+  });
+  await prisma.riskEvent.create({
+    data: { riskId: resolvedRisk.id, fromStatus: "OPEN", toStatus: "RESOLVED", actorId: users[D2].id, note: "Category-level proxy demand backfill validated; gap closed.", createdAt: addDays(-3) },
+  });
+
+  await prisma.projectStakeholder.create({
+    data: { projectId: claimsProject.id, userId: users["owner.cement2@anwargroup.test"].id, raciRole: "CONSULTED", note: "Sales & Distribution weighs in on claims-routing rules for their region." },
+  });
+  await prisma.projectStakeholder.create({
+    data: { projectId: claimsProject.id, userId: users[TL2].id, raciRole: "INFORMED" },
+  });
+
+  const stuckMilestoneId = claimsMilestones[2]; // "Core OCR pipeline", overdue and IN_PROGRESS in the spec above.
+  await prisma.agentFlag.create({
+    data: {
+      projectId: claimsProject.id,
+      flagType: "STUCK_MILESTONE",
+      subjectId: stuckMilestoneId,
+      narration: "Core OCR pipeline is overdue, owned by Tanvir Ahmed. No AI recommendation available — narration service unreachable.",
+      narrationSource: "RULE_FALLBACK",
+      severity: 2,
+    },
+  });
+
+  console.log("Seeded 1 open risk, 1 resolved risk, 2 project stakeholders, and 1 agent flag.");
 }
 
 main()

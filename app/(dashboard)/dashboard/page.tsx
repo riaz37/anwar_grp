@@ -1,51 +1,63 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ProjectHealth, ProjectStage } from "@prisma/client";
-import {
-  AlarmClock,
-  CalendarClock,
-  FolderKanban,
-  TriangleAlert,
-} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { hasProjectPermission } from "@/lib/project-authz";
-import {
-  isMilestoneOverdue,
-  milestoneRequiresDelayReason,
-} from "@/lib/project-health";
-import { daysSince } from "@/lib/format";
-import { alias } from "@/components/shell/icons";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { ButtonLink } from "@/components/ui/Button";
-import { HEALTH_LABELS, STAGE_ORDER } from "@/components/projects/projectTone";
-import { Panel } from "@/components/dashboard/portfolio/Panel";
-import { StatTile } from "@/components/dashboard/portfolio/StatTile";
-import { AttentionList } from "@/components/dashboard/portfolio/AttentionList";
-import { HealthMix } from "@/components/dashboard/portfolio/HealthMix";
-import { CompletionTrend } from "@/components/dashboard/portfolio/CompletionTrend";
-import { StageBreakdown } from "@/components/dashboard/portfolio/StageBreakdown";
-import { MilestoneList } from "@/components/dashboard/portfolio/MilestoneList";
-import { DeliveryList } from "@/components/dashboard/portfolio/DeliveryList";
-import { WorkloadList } from "@/components/dashboard/portfolio/WorkloadList";
+import {
+  OwnershipQueue,
+  type OwnershipGapCategory,
+  type OwnershipGapRow,
+} from "@/components/dashboard/portfolio/OwnershipQueue";
+import {
+  ScheduleBoard,
+  type ScheduleRow,
+} from "@/components/dashboard/portfolio/ScheduleBoard";
 
 export const metadata: Metadata = { title: "Management Dashboard" };
 export const dynamic = "force-dynamic";
 
-/** Rows fetched per milestone list. Anything beyond this is reported as a
- *  count rather than silently dropped. */
-const MILESTONE_LIST_LIMIT = 8;
-/** Projects shown in the decision queue before it becomes a scroll. */
-const ATTENTION_LIST_LIMIT = 25;
-/** Window for the completion trend chart. */
-const TREND_DAYS = 14;
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** Open agent flags shown in the ownership queue before it scrolls. */
+const AGENT_FLAG_LIMIT = 25;
 
-const ActiveIcon = alias(FolderKanban);
-const AttentionIcon = alias(TriangleAlert);
-const OverdueIcon = alias(AlarmClock);
-const UpcomingIcon = alias(CalendarClock);
+const HEALTH_URGENCY: Record<ProjectHealth, number> = {
+  BLOCKED: 3,
+  DELAYED: 2,
+  AT_RISK: 1,
+  ON_TRACK: 0,
+};
 
+/**
+ * The monitor raises an OWNERSHIP_GAP flag for exactly two situations
+ * (`lib/raci-engine.ts`'s `getOwnershipGaps`): no Responsible/Accountable
+ * owner, or an approved project nobody is Consulted/Informed on. The flag row
+ * carries no discriminator — its `narration` is free text — so the category is
+ * recovered from the fixed phrasing each branch produces. It decides which
+ * inline fix the row offers, never what the row says.
+ */
+function categorize(reason: string): OwnershipGapCategory {
+  return /consulted or informed/i.test(reason) ? "visibility" : "owner";
+}
+
+/** The cron's stock fallback sentence when the LLM narrator was unreachable —
+ *  an internal detail, not worth repeating on every row. */
+const FALLBACK_NARRATION_SUFFIX = / No AI recommendation available.*$/i;
+
+function displayReason(reason: string): string {
+  return reason.replace(FALLBACK_NARRATION_SUFFIX, "").trim();
+}
+
+/**
+ * Management Dashboard — a decision board, not a report.
+ *
+ * Management has no time to visualise a portfolio, so the page carries the
+ * two questions that actually need an answer today and nothing else: which
+ * off-track projects are running out of runway (Schedule), and which projects
+ * nobody owns or watches (Ownership). Both are real monitor/Prisma data; the
+ * ownership rows are fixable in place, so the page is somewhere work is done
+ * rather than a launchpad into five other screens.
+ */
 export default async function ManagementDashboardPage() {
   const session = await getSession();
   if (!session || !hasProjectPermission(session.role, "VIEW_MANAGEMENT_DASHBOARD")) {
@@ -53,456 +65,121 @@ export default async function ManagementDashboardPage() {
   }
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const sevenDaysOut = new Date(now.getTime() + 7 * DAY_MS);
-  const trendStart = new Date(now.getTime() - (TREND_DAYS - 1) * DAY_MS);
 
-  const overdueWhere = {
-    status: { not: "DONE" as const },
-    dueDate: { lt: now },
-  };
-  const upcomingWhere = {
-    status: { not: "DONE" as const },
-    dueDate: { gte: now, lte: sevenDaysOut },
-  };
-
-  const [
-    totalActiveProjects,
-    stageCounts,
-    healthCounts,
-    expectedThisMonth,
-    expectedThisMonthTotal,
-    upcomingMilestones,
-    upcomingMilestoneTotal,
-    overdueMilestones,
-    overdueMilestoneTotal,
-    analystGroups,
-    developerGroups,
-    attentionProjects,
-    oldestActiveProject,
-    recentlyCompletedMilestones,
-  ] = await Promise.all([
-    prisma.project.count({
-      where: { currentStage: { not: ProjectStage.COMPLETED } },
-    }),
-    prisma.project.groupBy({ by: ["currentStage"], _count: { _all: true } }),
-    prisma.project.groupBy({ by: ["health"], _count: { _all: true } }),
-    prisma.project.findMany({
-      where: { expectedDeliveryDate: { gte: startOfMonth, lt: startOfNextMonth } },
-      select: {
-        id: true,
-        name: true,
-        currentStage: true,
-        expectedDeliveryDate: true,
+  const [openAgentFlags, ganttProjects] = await Promise.all([
+    // The monitoring loop's own findings are the single source of truth for
+    // ownership gaps (AGENTIC_DASHBOARD_PLAN.md) — never recomputed here.
+    prisma.agentFlag.findMany({
+      where: { resolvedAt: null, flagType: "OWNERSHIP_GAP" },
+      orderBy: { severity: "desc" },
+      take: AGENT_FLAG_LIMIT,
+      include: {
+        project: {
+          // `version` feeds the optimistic-lock token the inline owner
+          // assignment has to send with its PATCH.
+          select: { id: true, name: true, version: true },
+        },
       },
-      orderBy: { expectedDeliveryDate: "asc" },
-      take: MILESTONE_LIST_LIMIT,
-    }),
-    prisma.project.count({
-      where: { expectedDeliveryDate: { gte: startOfMonth, lt: startOfNextMonth } },
-    }),
-    prisma.milestone.findMany({
-      where: upcomingWhere,
-      select: {
-        id: true,
-        name: true,
-        dueDate: true,
-        project: { select: { id: true, name: true } },
-        owner: { select: { name: true } },
-      },
-      orderBy: { dueDate: "asc" },
-      take: MILESTONE_LIST_LIMIT,
-    }),
-    prisma.milestone.count({ where: upcomingWhere }),
-    prisma.milestone.findMany({
-      where: overdueWhere,
-      select: {
-        id: true,
-        name: true,
-        dueDate: true,
-        project: { select: { id: true, name: true } },
-        owner: { select: { name: true } },
-      },
-      orderBy: { dueDate: "asc" },
-      take: MILESTONE_LIST_LIMIT,
-    }),
-    prisma.milestone.count({ where: overdueWhere }),
-    prisma.project.groupBy({
-      by: ["analystId"],
-      where: {
-        analystId: { not: null },
-        currentStage: { not: ProjectStage.COMPLETED },
-      },
-      _count: { _all: true },
-    }),
-    prisma.project.groupBy({
-      by: ["developerId"],
-      where: {
-        developerId: { not: null },
-        currentStage: { not: ProjectStage.COMPLETED },
-      },
-      _count: { _all: true },
     }),
     prisma.project.findMany({
-      where: { health: { in: [ProjectHealth.BLOCKED, ProjectHealth.DELAYED] } },
+      where: {
+        currentStage: { not: ProjectStage.COMPLETED },
+        health: { not: ProjectHealth.ON_TRACK },
+      },
       select: {
         id: true,
         name: true,
         health: true,
-        currentStage: true,
-        blockers: {
-          where: { resolvedAt: null },
-          orderBy: { createdAt: "asc" },
-          take: 1,
-          select: { description: true },
-        },
+        createdAt: true,
+        expectedDeliveryDate: true,
         milestones: {
           where: { status: { not: "DONE" } },
           orderBy: { dueDate: "asc" },
-          select: { id: true, name: true, dueDate: true, status: true },
+          select: { name: true, dueDate: true },
         },
       },
-    }),
-    // Longest-running open project — the one figure the stage breakdown can't
-    // show: which work has been in flight longest without reaching COMPLETED.
-    prisma.project.findFirst({
-      where: { currentStage: { not: ProjectStage.COMPLETED } },
-      select: { createdAt: true },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.milestone.findMany({
-      where: { completedAt: { gte: trendStart } },
-      select: { completedAt: true, dueDate: true },
+      orderBy: { expectedDeliveryDate: "asc" },
     }),
   ]);
 
-  const countForStage = (stage: ProjectStage) =>
-    stageCounts.find((s) => s.currentStage === stage)?._count._all ?? 0;
+  const gapRows: OwnershipGapRow[] = openAgentFlags.map((flag) => ({
+    flagId: flag.id,
+    projectId: flag.project.id,
+    projectName: flag.project.name,
+    projectVersion: flag.project.version,
+    category: categorize(flag.narration),
+    reason: displayReason(flag.narration),
+  }));
 
-  // COMPLETED is split out of the stage list: the portfolio figure counts
-  // active projects, so folding finished work into the same column would make
-  // the rows fail to add up to the number in the header.
-  const activeByStage = STAGE_ORDER.filter(
-    (stage) => stage !== ProjectStage.COMPLETED,
-  ).map((stage) => ({ stage, count: countForStage(stage) }));
-  const completedCount = countForStage(ProjectStage.COMPLETED);
+  const scheduleRows: ScheduleRow[] = ganttProjects
+    .map((p) => {
+      const overdue = p.milestones
+        .filter((m) => m.dueDate.getTime() < now.getTime())
+        .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+      const upcoming = p.milestones
+        .filter((m) => m.dueDate.getTime() >= now.getTime())
+        .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0];
+      const critical = overdue ?? upcoming ?? null;
+      return {
+        projectId: p.id,
+        name: p.name,
+        health: p.health,
+        startDate: p.createdAt.toISOString(),
+        expectedDeliveryDate: p.expectedDeliveryDate.toISOString(),
+        criticalMilestoneName: critical?.name ?? null,
+        criticalMilestoneDate: critical?.dueDate.toISOString() ?? null,
+        criticalMilestoneOverdue: Boolean(overdue),
+      };
+    })
+    // Most urgent first (blocked > delayed > at-risk), soonest delivery date
+    // as the tiebreaker — the row order is the reading order.
+    .sort((a, b) => {
+      const urgencyDiff = HEALTH_URGENCY[b.health] - HEALTH_URGENCY[a.health];
+      if (urgencyDiff !== 0) return urgencyDiff;
+      return (
+        new Date(a.expectedDeliveryDate).getTime() -
+        new Date(b.expectedDeliveryDate).getTime()
+      );
+    });
 
-  const byHealth = (Object.keys(HEALTH_LABELS) as ProjectHealth[]).map(
-    (health) => ({
-      health,
-      count: healthCounts.find((h) => h.health === health)?._count._all ?? 0,
-    }),
-  );
-  const needsDecisionCount = byHealth
-    .filter(
-      (h) =>
-        h.health === ProjectHealth.BLOCKED || h.health === ProjectHealth.DELAYED,
-    )
-    .reduce((sum, h) => sum + h.count, 0);
-
-  // Denominators for the gauges on the figure strip. Both come from counts
-  // this page already holds — a tile only gets a gauge where the ratio is
-  // real, never against an invented target.
-  const totalProjects = stageCounts.reduce((sum, s) => sum + s._count._all, 0);
-  const nearTermMilestones = overdueMilestoneTotal + upcomingMilestoneTotal;
-
-  const oldestActiveDays = oldestActiveProject
-    ? daysSince(oldestActiveProject.createdAt.toISOString(), now)
-    : null;
-
-  // Completions per day over the trailing window, split into on-time
-  // (completed at or before its due date) and late.
-  const trendBuckets = Array.from({ length: TREND_DAYS }, (_, i) => {
-    const date = new Date(trendStart.getTime() + i * DAY_MS);
-    return { date: date.toISOString().slice(0, 10), onTime: 0, late: 0 };
-  });
-  for (const m of recentlyCompletedMilestones) {
-    if (!m.completedAt) continue;
-    const key = m.completedAt.toISOString().slice(0, 10);
-    const bucket = trendBuckets.find((b) => b.date === key);
-    if (!bucket) continue;
-    if (m.completedAt.getTime() <= m.dueDate.getTime()) bucket.onTime += 1;
-    else bucket.late += 1;
-  }
-
-  const userIds = [
-    ...new Set(
-      [
-        ...analystGroups.map((g) => g.analystId),
-        ...developerGroups.map((g) => g.developerId),
-      ].filter((v): v is string => v !== null),
-    ),
-  ];
-  const workUsers = userIds.length
-    ? await prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : [];
-  const nameById = new Map(workUsers.map((u) => [u.id, u.name]));
-
-  const toWorkload = (
-    groups: { key: string | null; count: number }[],
-  ): { userId: string; name: string; count: number }[] =>
-    groups
-      .filter((g): g is { key: string; count: number } => g.key !== null)
-      .map((g) => ({
-        userId: g.key,
-        name: nameById.get(g.key) ?? "Unknown",
-        count: g.count,
-      }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-
-  const analystWorkload = toWorkload(
-    analystGroups.map((g) => ({ key: g.analystId, count: g._count._all })),
-  );
-  const developerWorkload = toWorkload(
-    developerGroups.map((g) => ({ key: g.developerId, count: g._count._all })),
-  );
-
-  const attentionItems = (
-    await Promise.all(
-      attentionProjects.map(async (p) => {
-        let reason: string | null = null;
-        let needsDelayReason = false;
-        if (p.health === ProjectHealth.BLOCKED) {
-          reason = p.blockers[0]?.description ?? null;
-        } else if (p.health === ProjectHealth.DELAYED) {
-          const overdue = p.milestones
-            .filter((m) => isMilestoneOverdue(m))
-            .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
-          reason = overdue[0]?.name ?? null;
-          if (overdue[0]) {
-            needsDelayReason = await milestoneRequiresDelayReason(overdue[0].id);
-          }
-        }
-        return {
-          id: p.id,
-          name: p.name,
-          health: p.health,
-          currentStage: p.currentStage,
-          reason,
-          needsDelayReason,
-        };
-      }),
-    )
-  )
-    .sort((a, b) =>
-      a.health === b.health ? 0 : a.health === ProjectHealth.BLOCKED ? -1 : 1,
-    )
-    .slice(0, ATTENTION_LIST_LIMIT);
-
-  const listMeta = (shown: number, total: number, noun: string) => {
-    if (total === 0) return undefined;
-    if (total > shown) return `${shown} of ${total}`;
-    return `${total} ${noun}${total === 1 ? "" : "s"}`;
-  };
+  const asOf = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(now);
 
   return (
-    <>
-      <PageHeader
-        title="Management Dashboard"
-        description="Which projects need a decision today: what is stuck, what is late, and who is carrying the load."
-        actions={
-          <ButtonLink href="/projects" variant="primary">
-            Open the portfolio
+    <div className="flex flex-col gap-ds-9xl">
+      {/* The top bar already names the page, so the title here states the
+          question rather than repeating the breadcrumb. No standfirst
+          paragraph: the two section labels below carry the structure. */}
+      <header className="flex flex-wrap items-end justify-between gap-x-ds-5xl gap-y-ds-lg border-b border-outline-med pb-ds-4xl">
+        <h1 className="text-balance text-display-1 font-semibold text-text-high">
+          Needs a decision today
+        </h1>
+        <div className="flex items-center gap-ds-5xl">
+          <p className="font-data text-caption-2 tabular-nums text-text-low">
+            As of {asOf}
+          </p>
+          <ButtonLink href="/projects" variant="secondary">
+            Full portfolio
           </ButtonLink>
-        }
-      />
-
-      {/* Portfolio figures. Four counts read against each other, so they share
-          one row and one type treatment; only a count that needs acting on
-          takes colour. Each carries a gauge of the figure against its own real
-          whole — the share is the part a number alone can't show. */}
-      <div className="mt-ds-7xl grid grid-cols-1 gap-ds-2xl sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          index={0}
-          label="Active projects"
-          value={totalActiveProjects}
-          hint={
-            oldestActiveDays === null
-              ? `${completedCount} completed to date`
-              : `Oldest running ${oldestActiveDays}d · ${completedCount} completed`
-          }
-          icon={ActiveIcon}
-          href="/projects"
-          share={
-            totalProjects > 0
-              ? {
-                  total: totalProjects,
-                  label: `${totalActiveProjects} of ${totalProjects} projects on the books are still running.`,
-                }
-              : undefined
-          }
-        />
-        <StatTile
-          index={1}
-          label="Needs a decision"
-          value={needsDecisionCount}
-          hint="Blocked or delayed right now"
-          icon={AttentionIcon}
-          tone="warning"
-          share={
-            totalProjects > 0
-              ? {
-                  total: totalProjects,
-                  label: `${needsDecisionCount} of ${totalProjects} projects are blocked or delayed.`,
-                }
-              : undefined
-          }
-        />
-        <StatTile
-          index={2}
-          label="Overdue milestones"
-          value={overdueMilestoneTotal}
-          hint="Past their due date, still open"
-          icon={OverdueIcon}
-          tone="error"
-          share={
-            nearTermMilestones > 0
-              ? {
-                  total: nearTermMilestones,
-                  label: `${overdueMilestoneTotal} of ${nearTermMilestones} near-term milestones are already late.`,
-                }
-              : undefined
-          }
-        />
-        <StatTile
-          index={3}
-          label="Due within 7 days"
-          value={upcomingMilestoneTotal}
-          hint="Open milestones landing this week"
-          icon={UpcomingIcon}
-          share={
-            nearTermMilestones > 0
-              ? {
-                  total: nearTermMilestones,
-                  label: `${upcomingMilestoneTotal} of ${nearTermMilestones} near-term milestones are still inside their due date.`,
-                }
-              : undefined
-          }
-        />
-      </div>
-
-      {/* The two portfolio-wide graphics lead the page: the state of the work
-          on the left, its throughput on the right. Everything below them is a
-          drill-down into one of the two. */}
-      <div className="mt-ds-5xl grid grid-cols-1 gap-ds-2xl lg:grid-cols-12">
-        <Panel
-          className="rise-in lg:col-span-4"
-          title="Portfolio health"
-          description="Every project by its current state"
-        >
-          <HealthMix slices={byHealth} />
-        </Panel>
-
-        <Panel
-          className="rise-in lg:col-span-8"
-          title="Milestone throughput"
-          description={`Completions per day over the last ${TREND_DAYS} days, on time against late`}
-        >
-          <CompletionTrend buckets={trendBuckets} />
-        </Panel>
-      </div>
-
-      {/* Grouped by row, not by topic: Needs attention and Overdue milestones
-          are both short, urgent lists, so they sit side by side and stay
-          close in height; Expected this month and Due in the next 7 days are
-          both longer date-ordered lists, so they pair below. Pairing by list
-          length (rather than e.g. project lists vs milestone lists) is what
-          keeps a short list from being stretched to match an eleven-row
-          neighbour. Pipeline by stage always renders all nine stages — a
-          fixed length nothing else here matches — so it gets a row to
-          itself. */}
-      <div className="mt-ds-2xl grid grid-cols-1 items-start gap-ds-2xl lg:grid-cols-2">
-        <Panel
-          className="rise-in"
-          title="Needs attention"
-          description="Blocked and delayed projects, with the reason on the row."
-          meta={listMeta(
-            attentionItems.length,
-            needsDecisionCount,
-            "project",
-          )}
-          padded={false}
-        >
-          <AttentionList items={attentionItems} />
-        </Panel>
-
-        <Panel
-          className="rise-in"
-          title="Overdue milestones"
-          meta={listMeta(
-            overdueMilestones.length,
-            overdueMilestoneTotal,
-            "milestone",
-          )}
-          padded={false}
-        >
-          <MilestoneList
-            milestones={overdueMilestones}
-            variant="overdue"
-            now={now}
-            emptyNote="Every open milestone is still inside its due date."
-          />
-        </Panel>
-
-        <Panel
-          className="rise-in"
-          title="Expected this month"
-          meta={listMeta(expectedThisMonth.length, expectedThisMonthTotal, "project")}
-          padded={false}
-        >
-          <DeliveryList projects={expectedThisMonth} />
-        </Panel>
-
-        <Panel
-          className="rise-in"
-          title="Due in the next 7 days"
-          meta={listMeta(
-            upcomingMilestones.length,
-            upcomingMilestoneTotal,
-            "milestone",
-          )}
-          padded={false}
-        >
-          <MilestoneList
-            milestones={upcomingMilestones}
-            variant="upcoming"
-            now={now}
-            emptyNote="No milestone falls due in the next seven days."
-          />
-        </Panel>
-      </div>
-
-      <Panel
-        className="mt-ds-2xl rise-in"
-        title="Pipeline by stage"
-        description="Where the active work is sitting"
-        meta={`${completedCount} completed excluded`}
-      >
-        <StageBreakdown stages={activeByStage} />
-      </Panel>
-
-      <Panel
-        className="mt-ds-2xl rise-in"
-        title="Workload"
-        description="Active projects carried per person, heaviest first."
-      >
-        <div className="grid grid-cols-1 gap-x-ds-9xl gap-y-ds-7xl sm:grid-cols-2">
-          <WorkloadList
-            heading="AI analysts"
-            rows={analystWorkload}
-            emptyNote="Nobody is assigned to an active project as an AI analyst yet."
-          />
-          <WorkloadList
-            heading="Developers"
-            rows={developerWorkload}
-            emptyNote="Nobody is assigned to an active project as a developer yet."
-          />
         </div>
-      </Panel>
-    </>
+      </header>
+
+      {/* Stacked, not side-by-side: Schedule and Ownership carry unrelated
+          row counts (a handful of off-track projects vs. up to two dozen open
+          gaps), so a fixed-width column split leaves one side half-empty and
+          the other overflowing regardless of how either is styled. Full width
+          top-to-bottom lets each section be exactly as tall as its own
+          content and nothing else. */}
+      <ScheduleBoard nowIso={now.toISOString()} rows={scheduleRows} />
+      <OwnershipQueue
+        className="border-t border-outline-low pt-ds-9xl"
+        currentUserRole={session.role}
+        rows={gapRows}
+      />
+    </div>
   );
 }

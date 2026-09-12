@@ -6,6 +6,8 @@ import { isProjectParticipant } from "@/lib/project-authz";
 import { PORTFOLIO_WIDE_ROLES } from "@/lib/project-permissions";
 import { computeChecklistReadiness } from "@/lib/checklist-engine";
 import { isMilestoneAtRisk, isMilestoneOverdue } from "@/lib/project-health";
+import { getProjectRaci, getOwnershipGaps } from "@/lib/raci-engine";
+import { computeRiskSeverity } from "@/lib/risk-engine";
 import { ProjectDetailView } from "@/components/projects/detail/ProjectDetailView";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +107,24 @@ export default async function ProjectWorkspacePage({
     select: { id: true, name: true, role: true },
     orderBy: { name: "asc" },
   });
+
+  const [raci, ownershipGaps, stakeholderRows, riskRows] = await Promise.all([
+    getProjectRaci(project.id),
+    getOwnershipGaps(project.id),
+    prisma.projectStakeholder.findMany({
+      where: { projectId: project.id },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.risk.findMany({
+      where: { projectId: project.id },
+      include: {
+        owner: { select: { id: true, name: true } },
+        raisedBy: { select: { id: true, name: true } },
+      },
+      orderBy: { identifiedAt: "desc" },
+    }),
+  ]);
 
   const documentRows = await prisma.document.findMany({
     where: { ownerType: "PROJECT", ownerId: project.id },
@@ -240,6 +260,29 @@ export default async function ProjectWorkspacePage({
         uploadedBy: uploaderNameById.get(d.uploadedById) ?? "Unknown",
       }))}
       users={users}
+      raci={raci}
+      ownershipGaps={ownershipGaps}
+      stakeholders={stakeholderRows.map((s) => ({
+        id: s.id,
+        userId: s.user.id,
+        userName: s.user.name,
+        raciRole: s.raciRole,
+      }))}
+      risks={riskRows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        likelihood: r.likelihood,
+        impact: r.impact,
+        severity: computeRiskSeverity(r.likelihood, r.impact),
+        status: r.status,
+        mitigationPlan: r.mitigationPlan,
+        ownerId: r.owner.id,
+        ownerName: r.owner.name,
+        raisedByName: r.raisedBy.name,
+        identifiedAt: r.identifiedAt.toISOString(),
+        resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
+      }))}
     />
   );
 }

@@ -302,7 +302,7 @@ function TrendPlot({
             className={`fill-surface-1 ${b.late > 0 ? "stroke-warn-med" : "stroke-primary-med"}`}
             vectorEffect="non-scaling-stroke"
           >
-            <title>{`${formatDate(b.date)} — ${total} completed, ${b.late} late`}</title>
+            <title>{`${formatDate(b.date)}: ${total} completed, ${b.late} late`}</title>
           </circle>
         );
       })}

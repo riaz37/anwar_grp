@@ -1,0 +1,299 @@
+import "server-only";
+import { z } from "zod";
+import { tool } from "ai";
+import { prisma } from "./prisma";
+import { getProjectRaci, getOwnershipGaps, ProjectNotFoundError } from "./raci-engine";
+import { getProjectTimeline, type TimelineEntryType } from "./project-memory";
+import { isMilestoneOverdue } from "./project-health";
+import { isProjectParticipant, getAccessibleProjectIds } from "./project-authz";
+import type { SessionPayload } from "./session";
+
+export type AgentToolContext = SessionPayload;
+
+export interface ProjectStatusResult {
+  found: boolean;
+  projectId: string;
+  name: string | null;
+  currentStage: string | null;
+  health: string | null;
+  ownerName: string | null;
+  analystName: string | null;
+  developerName: string | null;
+  expectedDeliveryDate: string | null;
+  overdueMilestones: Array<{ id: string; name: string; dueDate: string }>;
+}
+
+/**
+ * Group D's tool set per AGENTIC_DASHBOARD_PLAN.md "Group D". VIEW_AGENT_INSIGHTS
+ * (checked once at the route level) only proves the caller may talk to the
+ * assistant at all — it does not prove they may see any given project, so
+ * every tool here re-applies the same `isProjectParticipant` scoping the
+ * rest of the app uses for reads. Non-participants get `found: false` /
+ * empty results (never a 403/404), matching the "don't invent, don't
+ * leak" behavior the system prompt already expects from tool results.
+ */
+export function createAgentTools(ctx: AgentToolContext) {
+  const getProjectStatus = tool({
+    description:
+      "Get a project's current stage, health, owner/analyst/developer, expected delivery date, and any overdue milestones.",
+    inputSchema: z.object({
+      projectId: z.string().describe("The project's id."),
+    }),
+    execute: async ({ projectId }): Promise<ProjectStatusResult> => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          owner: true,
+          analyst: true,
+          developer: true,
+          milestones: { where: { status: { not: "DONE" } } },
+        },
+      });
+      const notFound = {
+        found: false,
+        projectId,
+        name: null,
+        currentStage: null,
+        health: null,
+        ownerName: null,
+        analystName: null,
+        developerName: null,
+        expectedDeliveryDate: null,
+        overdueMilestones: [],
+      };
+      if (!project || !isProjectParticipant(ctx, project)) {
+        return notFound;
+      }
+
+      const overdueMilestones = project.milestones
+        .filter((m) => isMilestoneOverdue(m))
+        .map((m) => ({ id: m.id, name: m.name, dueDate: m.dueDate.toISOString() }));
+
+      return {
+        found: true,
+        projectId: project.id,
+        name: project.name,
+        currentStage: project.currentStage,
+        health: project.health,
+        ownerName: project.owner.name,
+        analystName: project.analyst?.name ?? null,
+        developerName: project.developer?.name ?? null,
+        expectedDeliveryDate: project.expectedDeliveryDate.toISOString(),
+        overdueMilestones,
+      };
+    },
+  });
+
+  const getProjectRaciTool = tool({
+    description:
+      "Get a project's RACI grid (Accountable/Responsible/Consulted/Informed) and any ownership gaps flagged against it.",
+    inputSchema: z.object({
+      projectId: z.string().describe("The project's id."),
+    }),
+    execute: async ({ projectId }) => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+      });
+      if (!project || !isProjectParticipant(ctx, project)) {
+        return { found: false, projectId, raci: null, ownershipGaps: [] };
+      }
+      try {
+        const [raci, ownershipGaps] = await Promise.all([
+          getProjectRaci(projectId),
+          getOwnershipGaps(projectId),
+        ]);
+        return { found: true, projectId, raci, ownershipGaps };
+      } catch (err) {
+        if (err instanceof ProjectNotFoundError) {
+          return { found: false, projectId, raci: null, ownershipGaps: [] };
+        }
+        throw err;
+      }
+    },
+  });
+
+  const listOpenFlags = tool({
+    description:
+      "List currently open agent-raised flags (stuck milestones, stuck blockers, high-severity risks, ownership gaps), optionally scoped to one project.",
+    inputSchema: z.object({
+      projectId: z.string().optional().describe("Optional project id to scope the flags to."),
+    }),
+    execute: async ({ projectId }) => {
+      if (projectId) {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+        });
+        if (!project || !isProjectParticipant(ctx, project)) {
+          return { count: 0, flags: [] };
+        }
+      }
+      const accessible = projectId ? undefined : await getAccessibleProjectIds(ctx);
+      const flags = await prisma.agentFlag.findMany({
+        where: {
+          resolvedAt: null,
+          ...(projectId
+            ? { projectId }
+            : accessible !== "ALL"
+              ? { projectId: { in: accessible } }
+              : {}),
+        },
+        include: { project: { select: { id: true, name: true } } },
+        orderBy: { severity: "desc" },
+        take: 50,
+      });
+      return {
+        count: flags.length,
+        flags: flags.map((flag) => ({
+          id: flag.id,
+          projectId: flag.projectId,
+          projectName: flag.project.name,
+          flagType: flag.flagType,
+          subjectId: flag.subjectId,
+          severity: flag.severity,
+          narration: flag.narration,
+          narrationSource: flag.narrationSource,
+          firstFlaggedAt: flag.firstFlaggedAt.toISOString(),
+        })),
+      };
+    },
+  });
+
+  const getProjectTimelineTool = tool({
+    description:
+      "Get a project's chronological event history (stage changes, delay reasons, blockers, scope changes, risks, agent flags), optionally filtered to specific event types.",
+    inputSchema: z.object({
+      projectId: z.string().describe("The project's id."),
+      types: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional list of timeline entry types to filter to, e.g. STAGE_CHANGE, DELAY_REASON, BLOCKER_RAISED, RISK_RAISED.",
+        ),
+    }),
+    execute: async ({ projectId, types }) => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+      });
+      if (!project || !isProjectParticipant(ctx, project)) {
+        return { count: 0, entries: [] };
+      }
+      const entries = await getProjectTimeline(projectId, {
+        types: types as TimelineEntryType[] | undefined,
+      });
+      return {
+        count: entries.length,
+        entries: entries.map((entry) => ({
+          type: entry.type,
+          timestamp: entry.timestamp.toISOString(),
+          actorName: entry.actorName,
+          summary: entry.summary,
+        })),
+      };
+    },
+  });
+
+  const searchDocuments = tool({
+    description:
+      "Case-insensitive keyword search over document filenames and free-text notes (blocker descriptions, delay reason notes). NOTE: this is a plain text-contains search, not semantic/embedding search — it will miss paraphrases or synonyms of the query.",
+    inputSchema: z.object({
+      query: z.string().min(1).describe("Keyword or phrase to search for."),
+      projectId: z.string().optional().describe("Optional project id to scope the search to."),
+    }),
+    execute: async ({ query, projectId }) => {
+      if (projectId) {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+        });
+        if (!project || !isProjectParticipant(ctx, project)) {
+          return { count: 0, documents: [], blockers: [], delayReasons: [] };
+        }
+      }
+      const accessible = projectId ? undefined : await getAccessibleProjectIds(ctx);
+      const projectScope = projectId
+        ? { projectId }
+        : accessible !== "ALL"
+          ? { projectId: { in: accessible } }
+          : {};
+
+      const [documents, blockers, delayReasons] = await Promise.all([
+        prisma.document.findMany({
+          where: {
+            fileName: { contains: query, mode: "insensitive" },
+            ...(projectId ? { ownerType: "PROJECT", ownerId: projectId } : {}),
+          },
+          take: 20,
+          select: { id: true, fileName: true, ownerType: true, ownerId: true, createdAt: true },
+        }),
+        prisma.blocker.findMany({
+          where: {
+            description: { contains: query, mode: "insensitive" },
+            ...projectScope,
+          },
+          take: 20,
+          select: {
+            id: true,
+            projectId: true,
+            description: true,
+            createdAt: true,
+            project: { select: { name: true } },
+          },
+        }),
+        prisma.delayReason.findMany({
+          where: {
+            note: { contains: query, mode: "insensitive" },
+            ...projectScope,
+          },
+          take: 20,
+          select: {
+            id: true,
+            projectId: true,
+            note: true,
+            category: true,
+            createdAt: true,
+            project: { select: { name: true } },
+          },
+        }),
+      ]);
+
+      return {
+        count: documents.length + blockers.length + delayReasons.length,
+        documents: documents.map((d) => ({
+          id: d.id,
+          fileName: d.fileName,
+          ownerType: d.ownerType,
+          ownerId: d.ownerId,
+          createdAt: d.createdAt.toISOString(),
+        })),
+        blockers: blockers.map((b) => ({
+          id: b.id,
+          projectId: b.projectId,
+          projectName: b.project.name,
+          description: b.description,
+          createdAt: b.createdAt.toISOString(),
+        })),
+        delayReasons: delayReasons.map((d) => ({
+          id: d.id,
+          projectId: d.projectId,
+          projectName: d.project.name,
+          category: d.category,
+          note: d.note,
+          createdAt: d.createdAt.toISOString(),
+        })),
+      };
+    },
+  });
+
+  return {
+    getProjectStatus,
+    getProjectRaci: getProjectRaciTool,
+    listOpenFlags,
+    getProjectTimeline: getProjectTimelineTool,
+    searchDocuments,
+  };
+}
+
+export type AgentToolSet = ReturnType<typeof createAgentTools>;

@@ -9,6 +9,13 @@ export default defineConfig({
     // run one at a time to avoid cross-test data races on shared tables.
     fileParallelism: false,
     setupFiles: ["./test/setup.ts"],
+    // DATABASE_URL is a cross-region Supabase pooler (~700-1000ms per
+    // round trip, measured live) — fixture setup/teardown alone (several
+    // sequential creates/deletes) can exceed the 10s/5s Vitest defaults
+    // well before the test body even runs. Not a functional bug, just
+    // real network latency this suite must budget for.
+    hookTimeout: 30000,
+    testTimeout: 30000,
   },
   resolve: {
     alias: {

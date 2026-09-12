@@ -28,6 +28,7 @@ export async function GET() {
       analystGroups,
       developerGroups,
       attentionProjects,
+      openAgentFlags,
     ] = await Promise.all([
       prisma.project.count({ where: { currentStage: { not: ProjectStage.COMPLETED } } }),
       prisma.project.groupBy({ by: ["currentStage"], _count: { _all: true } }),
@@ -89,6 +90,16 @@ export async function GET() {
             where: { status: { not: "DONE" } },
             orderBy: { dueDate: "asc" },
             select: { name: true, dueDate: true, status: true, id: true },
+          },
+        },
+      }),
+      prisma.agentFlag.findMany({
+        where: { resolvedAt: null },
+        orderBy: { severity: "desc" },
+        take: 25,
+        include: {
+          project: {
+            select: { id: true, name: true, health: true, currentStage: true },
           },
         },
       }),
@@ -175,21 +186,38 @@ export async function GET() {
 
         return {
           id: p.id,
+          projectId: p.id,
           name: p.name,
           health: p.health,
           currentStage: p.currentStage,
           reason,
           needsDelayReason,
+          source: "RULE" as const,
+          sortWeight: p.health === ProjectHealth.BLOCKED ? 3 : 2,
         };
       }),
     );
 
-    const attentionItems = attentionItemsRaw
-      .sort((a, b) => {
-        if (a.health === b.health) return 0;
-        return a.health === ProjectHealth.BLOCKED ? -1 : 1;
-      })
-      .slice(0, 25);
+    // Open AgentFlag rows (AGENTIC_DASHBOARD_PLAN.md "How the dashboard
+    // consumes it") merged into the same decision queue rather than a
+    // second, competing widget — flagType distinguishes them in the UI.
+    const agentAttentionItems = openAgentFlags.map((flag) => ({
+      id: `flag-${flag.id}`,
+      projectId: flag.project.id,
+      name: flag.project.name,
+      health: flag.project.health,
+      currentStage: flag.project.currentStage,
+      reason: flag.narration,
+      needsDelayReason: false,
+      source: "AGENT" as const,
+      flagType: flag.flagType,
+      sortWeight: flag.severity,
+    }));
+
+    const attentionItems = [...attentionItemsRaw, ...agentAttentionItems]
+      .sort((a, b) => b.sortWeight - a.sortWeight)
+      .slice(0, 25)
+      .map(({ sortWeight, ...item }) => item);
 
     return ok({
       totalActiveProjects,

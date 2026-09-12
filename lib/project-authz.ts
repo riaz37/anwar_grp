@@ -79,3 +79,31 @@ export async function requireProjectParticipant(
     throw new AuthzError("Project not found.", 404, "NOT_FOUND");
   }
 }
+
+/**
+ * Project ids `user` may see. "ALL" for portfolio-wide roles
+ * (AI_TEAM_LEAD/MANAGEMENT) — callers should skip filtering by id in that
+ * case rather than fetching every id. Used to scope agent-tool queries
+ * (e.g. listOpenFlags/searchDocuments with no explicit projectId) to the
+ * same set `isProjectParticipant` would allow one-by-one.
+ */
+export async function getAccessibleProjectIds(
+  user: SessionPayload,
+): Promise<string[] | "ALL"> {
+  if (user.role === "AI_TEAM_LEAD" || user.role === "MANAGEMENT") return "ALL";
+
+  const projects = await prisma.project.findMany({
+    where: {
+      OR: [
+        { ownerId: user.userId },
+        { analystId: user.userId },
+        { developerId: user.userId },
+        ...(user.role === "BUSINESS_OWNER" && user.departmentId
+          ? [{ departmentId: user.departmentId }]
+          : []),
+      ],
+    },
+    select: { id: true },
+  });
+  return projects.map((p) => p.id);
+}

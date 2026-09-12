@@ -49,7 +49,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem={false}>
           <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
           {/* Action feedback for mutations that otherwise complete silently. */}
           <Toaster position="bottom-right" closeButton richColors={false} />

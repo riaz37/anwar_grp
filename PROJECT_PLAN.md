@@ -215,6 +215,25 @@ matching `app/(dashboard)/*` and `app/api/v1/*` routes.
    granular per-event pushes — worth a line in `TODOS.md` if it comes
    up, not built speculatively now.
 
+   **Update 2 (explicit user decision, 2026-09-12):** the user
+   overrode the "proactive email is opt-in only" stance below —
+   `app/api/internal/agent-monitor/route.ts` now sends an immediate
+   email (via `lib/email.ts`/Resend) to every active MANAGEMENT/
+   AI_TEAM_LEAD user whenever a new `AgentFlag` is created, not just
+   on request. This is a deliberate, acknowledged reversal of this
+   section's original push-notification rationale — the in-app
+   pull-based attention queue is unchanged and remains the source of
+   truth, email is now an additional real-time channel on top of it.
+
+   **Update (see `AGENTIC_DASHBOARD_PLAN.md`):** the agentic PMO/
+   dashboard enhancement's "early-warning alerts" requirement is
+   satisfied without reversing this decision — `AgentFlag` rows
+   (stuck milestones/blockers, high-severity risks, ownership gaps)
+   surface in-app, in the same pull-based attention queue described
+   above, not via email/Slack/push. Proactive email remains an
+   explicitly opt-in, off-by-default secondary path, not the primary
+   mechanism. This item's pull-not-push decision stands unchanged.
+
 ---
 
 ## 4. Data model (new, replaces recruitment schema)

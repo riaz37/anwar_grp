@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
@@ -67,18 +68,23 @@ model User {
   grantsIssued       ConfidentialDataGrant[] @relation("GrantIssuer")
 
   // Project domain relations.
-  projectsAsOwner       Project[]                @relation("ProjectOwner")
-  projectsAsAnalyst     Project[]                @relation("ProjectAnalyst")
-  projectsAsDeveloper   Project[]                @relation("ProjectDeveloper")
-  stageHistoryActions   ProjectStageHistory[]    @relation("StageHistoryActor")
-  checklistItemsChecked StageGateChecklistItem[] @relation("ChecklistCheckedBy")
-  milestonesOwned       Milestone[]              @relation("MilestoneOwner")
-  tasksOwned            ProjectTask[]            @relation("TaskOwner")
-  blockersRaised        Blocker[]                @relation("BlockerRaisedBy")
-  blockersResolved      Blocker[]                @relation("BlockerResolvedBy")
-  blockersResponsibleFor Blocker[]               @relation("BlockerResponsiblePerson")
-  scopeChangesRequested ScopeChange[]            @relation("ScopeChangeRequestedBy")
-  delayReasonsRecorded  DelayReason[]            @relation("DelayReasonRecordedBy")
+  projectsAsOwner        Project[]                @relation("ProjectOwner")
+  projectsAsAnalyst      Project[]                @relation("ProjectAnalyst")
+  projectsAsDeveloper    Project[]                @relation("ProjectDeveloper")
+  stageHistoryActions    ProjectStageHistory[]    @relation("StageHistoryActor")
+  checklistItemsChecked  StageGateChecklistItem[] @relation("ChecklistCheckedBy")
+  milestonesOwned        Milestone[]              @relation("MilestoneOwner")
+  tasksOwned             ProjectTask[]            @relation("TaskOwner")
+  blockersRaised         Blocker[]                @relation("BlockerRaisedBy")
+  blockersResolved       Blocker[]                @relation("BlockerResolvedBy")
+  blockersResponsibleFor Blocker[]                @relation("BlockerResponsiblePerson")
+  scopeChangesRequested  ScopeChange[]            @relation("ScopeChangeRequestedBy")
+  delayReasonsRecorded   DelayReason[]            @relation("DelayReasonRecordedBy")
+  risksOwned             Risk[]                   @relation("RiskOwner")
+  risksRaised            Risk[]                   @relation("RiskRaisedBy")
+  riskEventActions       RiskEvent[]              @relation("RiskEventActor")
+  stakeholderOf          ProjectStakeholder[]
+  chatConversations      ChatConversation[]
 
   @@map("users")
 }
@@ -191,34 +197,37 @@ enum ProjectHealth {
 }
 
 model Project {
-  id                    String        @id @default(cuid())
-  name                  String
-  businessUnitId        String
-  businessUnit          BusinessUnit  @relation(fields: [businessUnitId], references: [id])
-  departmentId          String
-  department            Department    @relation(fields: [departmentId], references: [id])
-  businessProblem       String
-  expectedOutcome       String
-  ownerId               String
-  owner                 User          @relation("ProjectOwner", fields: [ownerId], references: [id])
-  analystId             String?
-  analyst               User?         @relation("ProjectAnalyst", fields: [analystId], references: [id])
-  developerId           String?
-  developer             User?         @relation("ProjectDeveloper", fields: [developerId], references: [id])
-  currentStage          ProjectStage  @default(IDEA)
-  health                ProjectHealth @default(ON_TRACK)
-  expectedDeliveryDate  DateTime
-  version               Int           @default(1)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                   String        @id @default(cuid())
+  name                 String
+  businessUnitId       String
+  businessUnit         BusinessUnit  @relation(fields: [businessUnitId], references: [id])
+  departmentId         String
+  department           Department    @relation(fields: [departmentId], references: [id])
+  businessProblem      String
+  expectedOutcome      String
+  ownerId              String
+  owner                User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  analystId            String?
+  analyst              User?         @relation("ProjectAnalyst", fields: [analystId], references: [id])
+  developerId          String?
+  developer            User?         @relation("ProjectDeveloper", fields: [developerId], references: [id])
+  currentStage         ProjectStage  @default(IDEA)
+  health               ProjectHealth @default(ON_TRACK)
+  expectedDeliveryDate DateTime
+  version              Int           @default(1)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  stageHistory        ProjectStageHistory[]
-  gateChecklistItems  StageGateChecklistItem[]
-  milestones          Milestone[]
-  tasks               ProjectTask[]
-  blockers            Blocker[]
-  scopeChanges        ScopeChange[]
-  delayReasons        DelayReason[]
+  stageHistory       ProjectStageHistory[]
+  gateChecklistItems StageGateChecklistItem[]
+  milestones         Milestone[]
+  tasks              ProjectTask[]
+  blockers           Blocker[]
+  scopeChanges       ScopeChange[]
+  delayReasons       DelayReason[]
+  risks              Risk[]
+  stakeholders       ProjectStakeholder[]
+  agentFlags         AgentFlag[]
 
   @@index([businessUnitId, departmentId])
   @@index([currentStage])
@@ -231,16 +240,16 @@ model Project {
 // permanent history record with an evidence snapshot of the gate checklist
 // state at the moment of transition.
 model ProjectStageHistory {
-  id                String        @id @default(cuid())
-  projectId         String
-  project           Project       @relation(fields: [projectId], references: [id])
-  fromStage         ProjectStage?
-  toStage           ProjectStage
-  actorId           String
-  actor             User          @relation("StageHistoryActor", fields: [actorId], references: [id])
-  evidenceSnapshot  Json?
-  notes             String?
-  changedAt         DateTime      @default(now())
+  id               String        @id @default(cuid())
+  projectId        String
+  project          Project       @relation(fields: [projectId], references: [id])
+  fromStage        ProjectStage?
+  toStage          ProjectStage
+  actorId          String
+  actor            User          @relation("StageHistoryActor", fields: [actorId], references: [id])
+  evidenceSnapshot Json?
+  notes            String?
+  changedAt        DateTime      @default(now())
 
   @@index([projectId])
   @@map("project_stage_history")
@@ -251,18 +260,18 @@ model ProjectStageHistory {
 // *current* stage is blocked while any required=true item for that stage
 // is unchecked.
 model StageGateChecklistItem {
-  id            String        @id @default(cuid())
-  projectId     String
-  project       Project       @relation(fields: [projectId], references: [id])
-  stage         ProjectStage
-  label         String
-  required      Boolean       @default(true)
-  checked       Boolean       @default(false)
-  checkedById   String?
-  checkedBy     User?         @relation("ChecklistCheckedBy", fields: [checkedById], references: [id])
-  checkedAt     DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id])
+  stage       ProjectStage
+  label       String
+  required    Boolean      @default(true)
+  checked     Boolean      @default(false)
+  checkedById String?
+  checkedBy   User?        @relation("ChecklistCheckedBy", fields: [checkedById], references: [id])
+  checkedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@index([projectId, stage])
   @@map("stage_gate_checklist_items")
@@ -290,7 +299,7 @@ model Milestone {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  tasks       ProjectTask[]
+  tasks        ProjectTask[]
   delayReasons DelayReason[]
 
   @@index([projectId])
@@ -310,18 +319,18 @@ enum TaskStatus {
 // Milestone for grouping, but not required — an ad hoc action doesn't need
 // a milestone to exist.
 model ProjectTask {
-  id                String      @id @default(cuid())
-  projectId         String
-  project           Project     @relation(fields: [projectId], references: [id])
-  action            String
-  ownerId           String
-  owner             User        @relation("TaskOwner", fields: [ownerId], references: [id])
-  deadline          DateTime?
-  status            TaskStatus  @default(PENDING)
+  id                 String     @id @default(cuid())
+  projectId          String
+  project            Project    @relation(fields: [projectId], references: [id])
+  action             String
+  ownerId            String
+  owner              User       @relation("TaskOwner", fields: [ownerId], references: [id])
+  deadline           DateTime?
+  status             TaskStatus @default(PENDING)
   relatedMilestoneId String?
-  relatedMilestone  Milestone?  @relation(fields: [relatedMilestoneId], references: [id])
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  relatedMilestone   Milestone? @relation(fields: [relatedMilestoneId], references: [id])
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   @@index([projectId])
   @@index([ownerId, deadline])
@@ -397,18 +406,184 @@ enum DelayReasonCategory {
 }
 
 model DelayReason {
-  id            String              @id @default(cuid())
-  projectId     String
-  project       Project             @relation(fields: [projectId], references: [id])
-  milestoneId   String?
-  milestone     Milestone?          @relation(fields: [milestoneId], references: [id])
-  category      DelayReasonCategory
-  note          String?
-  recordedById  String
-  recordedBy    User                @relation("DelayReasonRecordedBy", fields: [recordedById], references: [id])
-  createdAt     DateTime            @default(now())
+  id           String              @id @default(cuid())
+  projectId    String
+  project      Project             @relation(fields: [projectId], references: [id])
+  milestoneId  String?
+  milestone    Milestone?          @relation(fields: [milestoneId], references: [id])
+  category     DelayReasonCategory
+  note         String?
+  recordedById String
+  recordedBy   User                @relation("DelayReasonRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime            @default(now())
 
   @@index([projectId])
   @@index([milestoneId])
   @@map("delay_reasons")
+}
+
+// ---------------------------------------------------------------------------
+// Risk register + RACI stakeholders + agentic monitoring loop
+// (AGENTIC_DASHBOARD_PLAN.md Group A). Forward-looking counterpart to
+// DelayReason/Blocker (both reactive) — likelihood/impact/status exist
+// before something has already gone wrong.
+// ---------------------------------------------------------------------------
+
+enum RiskLikelihood {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RiskImpact {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RiskStatus {
+  OPEN
+  MITIGATING
+  RESOLVED
+  ACCEPTED
+}
+
+model Risk {
+  id             String         @id @default(cuid())
+  projectId      String
+  project        Project        @relation(fields: [projectId], references: [id])
+  title          String
+  description    String
+  likelihood     RiskLikelihood
+  impact         RiskImpact
+  status         RiskStatus     @default(OPEN)
+  mitigationPlan String?
+  ownerId        String
+  owner          User           @relation("RiskOwner", fields: [ownerId], references: [id])
+  raisedById     String
+  raisedBy       User           @relation("RiskRaisedBy", fields: [raisedById], references: [id])
+  identifiedAt   DateTime       @default(now())
+  resolvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  events RiskEvent[]
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@map("risks")
+}
+
+// Append-only status/mitigation change log for a Risk — the project-memory
+// substrate for risks specifically.
+model RiskEvent {
+  id         String      @id @default(cuid())
+  riskId     String
+  risk       Risk        @relation(fields: [riskId], references: [id])
+  fromStatus RiskStatus?
+  toStatus   RiskStatus
+  note       String?
+  actorId    String
+  actor      User        @relation("RiskEventActor", fields: [actorId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@index([riskId])
+  @@map("risk_events")
+}
+
+enum RaciRole {
+  CONSULTED
+  INFORMED
+}
+
+// R/A are derived from existing fields (Project.owner = Accountable;
+// Project.analyst/developer = Responsible) — not stored here. C/I have no
+// existing analog, so they get real rows.
+model ProjectStakeholder {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  raciRole  RaciRole
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId, raciRole])
+  @@index([projectId])
+  @@map("project_stakeholders")
+}
+
+enum AgentFlagType {
+  STUCK_MILESTONE
+  STUCK_BLOCKER
+  HIGH_RISK
+  OWNERSHIP_GAP
+}
+
+enum NarrationSource {
+  LLM
+  RULE_FALLBACK
+}
+
+// Written by the monitoring-loop cron route only, never directly by a user
+// (mirrors Project.health being computed, not settable). The @@unique
+// constraint is the throttle: one open flag per (project, type, subject).
+model AgentFlag {
+  id               String          @id @default(cuid())
+  projectId        String
+  project          Project         @relation(fields: [projectId], references: [id])
+  flagType         AgentFlagType
+  subjectId        String
+  narration        String
+  narrationSource  NarrationSource
+  severity         Int
+  firstFlaggedAt   DateTime        @default(now())
+  lastEvaluatedAt  DateTime        @default(now())
+  resolvedAt       DateTime?
+  resolutionReason String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([projectId, flagType, subjectId])
+  @@index([projectId, resolvedAt])
+  @@map("agent_flags")
+}
+
+// ---------------------------------------------------------------------------
+// PMO agent chat: a dedicated, ChatGPT-style conversation history. Each user
+// owns their own conversations; messages are stored as AI SDK UIMessage parts
+// (Json) so streamed tool-call traces and reasoning replay unchanged on
+// reload, instead of being flattened to plain text.
+// ---------------------------------------------------------------------------
+
+model ChatConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @default("New chat")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("chat_conversations")
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ChatMessageRole
+  parts          Json
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
 }

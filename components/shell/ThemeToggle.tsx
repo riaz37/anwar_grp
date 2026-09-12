@@ -20,9 +20,9 @@ function useMounted(): boolean {
 
 /**
  * Light/dark toggle for the sidebar's bottom block (DESIGN.md > Sidebar).
- * Two states only — `next-themes` already resolves the OS preference into
- * `dark` or `light` on first load (`defaultTheme="system" enableSystem` in
- * `app/layout.tsx`); this control never exposes a third "system" option.
+ * Two states only — light is the fixed default (`defaultTheme="light"` in
+ * `app/layout.tsx`, OS preference ignored); this control never exposes a
+ * third "system" option.
  *
  * Reads after mount so SSR markup (which cannot know the resolved theme)
  * stays stable and there's no hydration mismatch.

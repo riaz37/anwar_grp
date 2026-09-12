@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Moon,
   Sun,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ export const HomeIcon = alias(House);
 export const TasksIcon = alias(ListChecks);
 export const ProjectsIcon = alias(FolderKanban);
 export const ReportsIcon = alias(ChartNoAxesColumn);
+export const ChatIcon = alias(MessageSquare);
 export const AdministrationIcon = alias(Settings);
 export const MenuIcon = alias(Menu);
 export const CloseIcon = alias(X);

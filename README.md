@@ -40,24 +40,19 @@ URLs) · Vitest (unit + integration).
 
 ## Getting started
 
-### 1. Start infra
+Database and document storage run on a hosted Supabase project — no local
+Postgres/MinIO infra to start.
 
-```bash
-docker compose up -d
-```
-
-Starts Postgres (`localhost:5433`) and MinIO (S3-compatible storage,
-`localhost:9000`).
-
-### 2. Configure environment
+### 1. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Defaults in `.env.example` already match `docker-compose.yml`.
+Fill in the Supabase project's pooled/direct connection strings and
+Storage S3 credentials (see the project's Supabase dashboard).
 
-### 3. Install, migrate, seed
+### 2. Install, migrate, seed
 
 ```bash
 npm install

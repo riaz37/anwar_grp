@@ -7,6 +7,8 @@ import {
   Plus,
   Check,
   ArrowLeft,
+  ArrowUp,
+  Square,
   Mail,
   MessageCircle,
   Calendar,
@@ -18,6 +20,7 @@ import {
   ChevronsUpDown,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { alias, type IconProps } from "@/components/shell/icons";
 
@@ -44,6 +47,9 @@ export const MapPinIcon = alias(MapPin);
 export const VideoIcon = alias(Video);
 export const UsersIcon = alias(Users);
 export const RetryIcon = alias(RotateCw);
+export const ChevronRightIcon = alias(ChevronRight);
+export const SendIcon = alias(ArrowUp);
+export const StopIcon = alias(Square, { strokeWidth: 0, fill: "currentColor" });
 
 /** lucide has no brand glyphs; WhatsApp is represented as a generic channel. */
 export const WhatsAppIcon = alias(MessageCircle);

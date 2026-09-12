@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/StatusPill";
@@ -26,6 +26,15 @@ import type {
   StageHistoryView,
   TaskView,
 } from "../types";
+import type {
+  OwnershipGapView,
+  ProjectRaciView,
+} from "../ProjectRaciPanel";
+import type { RiskView } from "../ProjectRisksPanel";
+import { ProjectGanttPanel } from "../ProjectGanttPanel";
+import { ProjectRaciPanel } from "../ProjectRaciPanel";
+import { ProjectRisksPanel } from "../ProjectRisksPanel";
+import { ProjectTimelinePanel } from "../ProjectTimelinePanel";
 import { BlockersSection } from "./BlockersSection";
 import { FilesSection } from "./FilesSection";
 import { GatesSection } from "./GatesSection";
@@ -34,6 +43,25 @@ import { ProjectRail } from "./ProjectRail";
 import { StageMeter } from "./StageMeter";
 import { WorkSection } from "./WorkSection";
 import { Num } from "./chrome";
+
+const VALID_TABS = new Set([
+  "overview",
+  "gates",
+  "work",
+  "blockers",
+  "files",
+  "gantt",
+  "raci",
+  "risks",
+  "timeline",
+]);
+
+interface StakeholderProp {
+  id: string;
+  userId: string;
+  userName: string;
+  raciRole: "CONSULTED" | "INFORMED";
+}
 
 /**
  * Single-project workspace.
@@ -61,6 +89,10 @@ export function ProjectDetailView({
   delayReasons,
   documents,
   users,
+  raci,
+  ownershipGaps,
+  stakeholders,
+  risks,
 }: {
   currentUserRole: Role;
   project: ProjectDetail;
@@ -75,9 +107,17 @@ export function ProjectDetailView({
   delayReasons: DelayReasonView[];
   documents: DocumentView[];
   users: RefUser[];
+  raci: ProjectRaciView;
+  ownershipGaps: OwnershipGapView[];
+  stakeholders: StakeholderProp[];
+  risks: RiskView[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState("overview");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState(
+    initialTab && VALID_TABS.has(initialTab) ? initialTab : "overview",
+  );
   const [refreshing, startRefresh] = useTransition();
 
   function refresh() {
@@ -88,6 +128,9 @@ export function ProjectDetailView({
 
   const openBlockers = blockers.filter((b) => !b.resolvedAt).length;
   const latestUpdateAge = latestUpdate ? daysSince(latestUpdate.at) : 0;
+  const openRisks = risks.filter((r) => r.status === "OPEN" || r.status === "MITIGATING");
+  const openRiskCount = openRisks.length;
+  const openHighRiskCount = openRisks.filter((r) => r.severity >= 3).length;
 
   return (
     <>
@@ -168,6 +211,22 @@ export function ProjectDetailView({
               <SectionTab value="files" count={documents.length}>
                 Files
               </SectionTab>
+              <SectionTab value="gantt">Gantt</SectionTab>
+              <SectionTab
+                value="raci"
+                count={ownershipGaps.length}
+                attention={ownershipGaps.length > 0}
+              >
+                RACI
+              </SectionTab>
+              <SectionTab
+                value="risks"
+                count={openRiskCount}
+                attention={openHighRiskCount > 0}
+              >
+                Risks
+              </SectionTab>
+              <SectionTab value="timeline">Timeline</SectionTab>
             </TabsList>
           </div>
 
@@ -220,6 +279,36 @@ export function ProjectDetailView({
               documents={documents}
               onChanged={refresh}
             />
+          </TabsContent>
+
+          <TabsContent value="gantt" className="pt-ds-9xl">
+            <ProjectGanttPanel projectId={project.id} />
+          </TabsContent>
+
+          <TabsContent value="raci" className="pt-ds-9xl">
+            <ProjectRaciPanel
+              projectId={project.id}
+              raci={raci}
+              ownershipGaps={ownershipGaps}
+              stakeholders={stakeholders}
+              users={users}
+              currentUserRole={currentUserRole}
+              onChanged={refresh}
+            />
+          </TabsContent>
+
+          <TabsContent value="risks" className="pt-ds-9xl">
+            <ProjectRisksPanel
+              projectId={project.id}
+              risks={risks}
+              users={users}
+              currentUserRole={currentUserRole}
+              onChanged={refresh}
+            />
+          </TabsContent>
+
+          <TabsContent value="timeline" className="pt-ds-9xl">
+            <ProjectTimelinePanel projectId={project.id} />
           </TabsContent>
         </Tabs>
 

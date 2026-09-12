@@ -47,6 +47,39 @@ function envelopeCode(error: ApiEnvelope<unknown>["error"]): string {
 }
 
 /**
+ * GETs and unwraps the envelope. Same error-handling contract as
+ * `postJson`/`patchJson` below.
+ */
+export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, { method: "GET", signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw new ApiRequestError(
+      "Couldn’t reach the server. Check your connection and try again.",
+      0,
+      "NETWORK_ERROR",
+    );
+  }
+
+  const envelope = (await response
+    .json()
+    .catch(() => null)) as ApiEnvelope<T> | null;
+
+  if (!response.ok || !envelope?.success) {
+    throw new ApiRequestError(
+      envelopeMessage(envelope?.error ?? null) ??
+        "The server rejected that request. Try again, or contact your administrator.",
+      response.status,
+      envelopeCode(envelope?.error ?? null),
+    );
+  }
+
+  return envelope.data as T;
+}
+
+/**
  * POSTs JSON and unwraps the envelope. Throws `ApiRequestError` on any
  * non-success response so callers can branch on `.status` (notably 409, the
  * optimistic-locking conflict — PROJECT_PLAN.md Sec 2.4).
