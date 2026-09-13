@@ -21,9 +21,13 @@ export const BASE_SYSTEM_PROMPT = `You are the PMO agentic assistant for this pr
 Answer ONLY using the results returned by your tools — never invent status, dates, names, or numbers.
 If a tool call returns nothing relevant to the question, say plainly that you don't know or that
 no matching data was found, rather than guessing or filling in a plausible-sounding answer.
+None of the tools below accept a project name — they all take a project id. When the user names a
+project (and you don't already have its id from context or an earlier tool result in this
+conversation), call listProjects first to resolve the name to an id before calling anything else.
 When asked about a specific project, prefer calling getProjectStatus, getProjectRaci, and
 getProjectTimeline for that project's id before answering. Use listOpenFlags for "what's flagged"
-or "what needs attention" questions. Use searchDocuments for free-text lookups, and note to the
+or "what needs attention" questions. Use getProjectDependencies for "what's blocking this" or
+"what does this depend on" questions. Use searchDocuments for free-text lookups, and note to the
 user when it is a keyword match rather than a semantic match if that distinction matters to their
 question.
 
@@ -86,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       ? `${BASE_SYSTEM_PROMPT}\n\n${identityLine}\n\nThe user is currently viewing project id "${body.projectId}" — scope your answers to this project unless they explicitly ask about the wider portfolio.`
       : `${BASE_SYSTEM_PROMPT}\n\n${identityLine}`;
 
-    const tools = createAgentTools(user);
+    const tools = createAgentTools(user, { boundProjectId: body.projectId });
 
     const result = streamText({
       model: llmModel,

@@ -1,6 +1,7 @@
 import "server-only";
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { generateText, type LanguageModel } from "ai";
 
 /**
  * AGENTIC_DASHBOARD_PLAN.md "DECIDED — Tech stack": self-hosted vLLM at
@@ -25,6 +26,22 @@ const llmProvider = createOpenAI({
 // `'role'` KeyError as soon as a tool result is sent back in a
 // follow-up turn (i.e. every multi-step tool-calling conversation).
 export const llmModel = llmProvider.chat(LLM_MODEL_ID);
+
+/**
+ * Fallback provider used when the self-hosted vLLM endpoint (llmModel) is
+ * unreachable or errors. GEMINI_API_KEY is required for this path — when
+ * absent, generateFlagNarration skips straight to RULE_FALLBACK instead of
+ * throwing. Narration produced this way is still reported as source "LLM"
+ * (not a separate value) since callers only distinguish LLM-generated text
+ * from the templated RULE_FALLBACK text.
+ */
+export const GEMINI_FALLBACK_MODEL_ID = "gemini-2.5-flash";
+
+const fallbackModel: LanguageModel | undefined = process.env.GEMINI_API_KEY
+  ? createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY })(
+      GEMINI_FALLBACK_MODEL_ID,
+    )
+  : undefined;
 
 export interface FlagNarrationResult {
   text: string;
@@ -59,6 +76,18 @@ export async function generateFlagNarration(
     });
     return { text, source: "LLM" };
   } catch {
-    return { text: "", source: "RULE_FALLBACK" };
+    if (!fallbackModel) {
+      return { text: "", source: "RULE_FALLBACK" };
+    }
+    try {
+      const { text } = await generateText({
+        model: fallbackModel,
+        prompt,
+        abortSignal: AbortSignal.timeout(timeoutMs),
+      });
+      return { text, source: "LLM" };
+    } catch {
+      return { text: "", source: "RULE_FALLBACK" };
+    }
   }
 }

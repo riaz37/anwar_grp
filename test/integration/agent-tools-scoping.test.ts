@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { createAgentTools } from "@/lib/agent-tools";
 import {
@@ -7,6 +7,11 @@ import {
   createFixtureOrg,
   createFixtureProject,
 } from "./setup-fixtures";
+
+// notifyProjectStakeholders sends a real email via Resend otherwise.
+vi.mock("@/lib/email", () => ({
+  sendProjectNotificationEmail: vi.fn(async (input: { recipients: unknown[] }) => input.recipients.length),
+}));
 
 /**
  * Covers the participant-scoping added to createAgentTools: opening
@@ -150,5 +155,163 @@ describe("agent tool scoping", () => {
     );
 
     expect(result.count).toBe(0);
+  });
+
+  it("notifyProjectStakeholders uses the route-bound projectId over a mistyped model-supplied one", async () => {
+    const viewedProject = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+    });
+
+    const tools = createAgentTools(asSession(org.teamLead), {
+      boundProjectId: viewedProject.id,
+    });
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { projectId: "not-a-real-id", message: "Update.", audience: ["owner"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(true);
+    expect(result.recipients).toEqual([org.teamLead.name]);
+  });
+
+  it("notifyProjectStakeholders falls back to the model-supplied projectId when nothing is bound", async () => {
+    const project = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+    });
+
+    const tools = createAgentTools(asSession(org.teamLead));
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { projectId: project.id, message: "Update.", audience: ["owner"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(true);
+  });
+
+  it("notifyProjectStakeholders still enforces participant scoping when a projectId is bound", async () => {
+    // A malicious/buggy caller can't use boundProjectId to reach a project
+    // the session isn't actually a participant on — isProjectParticipant
+    // still runs against ctx (the developer), regardless of who bound the id.
+    const otherProject = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+      analystId: org.analyst.id,
+      // developer intentionally not assigned
+    });
+
+    const tools = createAgentTools(asSession(org.developer), {
+      boundProjectId: otherProject.id,
+    });
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { message: "Update.", audience: ["owner"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("Project not found or not accessible.");
+  });
+
+  it("notifyProjectStakeholders returns a clear reason when neither bound nor model projectId is present", async () => {
+    const tools = createAgentTools(asSession(org.teamLead));
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { message: "Update.", audience: ["owner"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("No project specified.");
+  });
+
+  it("notifyProjectStakeholders dedupes recipients that match more than one requested audience", async () => {
+    // owner and analyst are the same person here — the audience list asks
+    // for both, but they should only be emailed once.
+    const project = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+      analystId: org.teamLead.id,
+    });
+
+    const tools = createAgentTools(asSession(org.teamLead), {
+      boundProjectId: project.id,
+    });
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { message: "Update.", audience: ["owner", "analyst"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.recipientCount).toBe(1);
+    expect(result.recipients).toEqual([org.teamLead.name]);
+  });
+
+  it("notifyProjectStakeholders notifies a role audience (management) scoped to the project's business unit", async () => {
+    const managementUser = await prisma.user.create({
+      data: {
+        email: `management-${Math.random().toString(36).slice(2, 8)}@test.local`,
+        name: "Test MANAGEMENT",
+        role: "MANAGEMENT",
+        passwordHash: "unused-in-tests",
+        businessUnitId: org.businessUnit.id,
+        departmentId: org.department.id,
+      },
+    });
+    const project = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+    });
+
+    const tools = createAgentTools(asSession(org.teamLead), {
+      boundProjectId: project.id,
+    });
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { message: "Update.", audience: ["management"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(true);
+    expect(result.recipients).toEqual([managementUser.name]);
+
+    await prisma.user.delete({ where: { id: managementUser.id } });
+  });
+
+  it("notifyProjectStakeholders reports no matching recipients instead of throwing when the audience has nobody to notify", async () => {
+    const project = await createFixtureProject({
+      businessUnitId: org.businessUnit.id,
+      departmentId: org.department.id,
+      ownerId: org.teamLead.id,
+      // no analyst/developer assigned, and no MANAGEMENT user exists in this fixture org
+    });
+
+    const tools = createAgentTools(asSession(org.teamLead), {
+      boundProjectId: project.id,
+    });
+    const result = await runTool(
+      tools.notifyProjectStakeholders.execute!(
+        { message: "Update.", audience: ["analyst", "developer", "management"] },
+        toolOptions,
+      ),
+    );
+
+    expect(result.sent).toBe(false);
+    expect(result.recipientCount).toBe(0);
+    expect(result.reason).toBe("No matching recipients found for the requested audience.");
   });
 });

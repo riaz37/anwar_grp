@@ -125,7 +125,7 @@ export function ScheduleBoard({
     () => new Set(HEALTH_FILTERS.map((f) => f.health)),
   );
   const [windowPreset, setWindowPreset] = useState<WindowPreset>("all");
-  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(0);
 
   const now = useMemo(() => new Date(nowIso), [nowIso]);
 
@@ -142,7 +142,15 @@ export function ScheduleBoard({
     () => rows.filter((r) => selectedHealths.has(r.health)),
     [rows, selectedHealths],
   );
-  const visibleRows = expanded ? filteredRows : filteredRows.slice(0, ROW_LIMIT);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / ROW_LIMIT));
+  // Filters/health toggles can shrink the row set out from under the current
+  // page (e.g. page 3 of "All" no longer exists once narrowed to "Blocked"),
+  // so clamp instead of trusting the stored index.
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleRows = filteredRows.slice(
+    currentPage * ROW_LIMIT,
+    currentPage * ROW_LIMIT + ROW_LIMIT,
+  );
 
   const { start: windowStart, end: windowEnd } = useMemo(
     () => windowForPreset(windowPreset, filteredRows, now),
@@ -178,7 +186,7 @@ export function ScheduleBoard({
           className="gap-ds-xxs"
           onValueChange={(next) => {
             setSelectedHealths(new Set(next as ProjectHealth[]));
-            setExpanded(false);
+            setPage(0);
           }}
           spacing={2}
           type="multiple"
@@ -244,17 +252,35 @@ export function ScheduleBoard({
           </span>
         </span>
         {filteredRows.length > ROW_LIMIT && (
-          <span className="flex items-center gap-ds-2xl">
+          <span className="flex items-center gap-ds-lg">
             <span className="font-data text-caption-2 tabular-nums text-text-low">
-              {visibleRows.length} of {filteredRows.length}
+              {currentPage * ROW_LIMIT + 1}–
+              {currentPage * ROW_LIMIT + visibleRows.length} of{" "}
+              {filteredRows.length}
             </span>
-            <Button
-              className="h-auto p-0 text-caption-2 font-medium text-primary-high"
-              onClick={() => setExpanded((v) => !v)}
-              variant="link"
-            >
-              {expanded ? "Show the top 10" : `Show all ${filteredRows.length}`}
-            </Button>
+            <span className="flex items-center gap-ds-xxs">
+              <Button
+                aria-label="Previous page"
+                className="h-auto px-ds-xs py-0 text-caption-2 font-medium text-primary-high disabled:text-text-low"
+                disabled={currentPage === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                variant="link"
+              >
+                Prev
+              </Button>
+              <span className="font-data text-caption-2 tabular-nums text-text-low">
+                {currentPage + 1}/{pageCount}
+              </span>
+              <Button
+                aria-label="Next page"
+                className="h-auto px-ds-xs py-0 text-caption-2 font-medium text-primary-high disabled:text-text-low"
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                variant="link"
+              >
+                Next
+              </Button>
+            </span>
           </span>
         )}
       </>

@@ -1,11 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { tool } from "ai";
-import type { Role } from "@prisma/client";
+import type { Role, DependencyItemType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getProjectRaci, getOwnershipGaps, ProjectNotFoundError } from "./raci-engine";
 import { getProjectTimeline, type TimelineEntryType } from "./project-memory";
-import { isMilestoneOverdue } from "./project-health";
+import { isMilestoneOverdue, isMilestoneAtRisk } from "./project-health";
 import { isProjectParticipant, getAccessibleProjectIds } from "./project-authz";
 import { sendProjectNotificationEmail } from "./email";
 import type { SessionPayload } from "./session";
@@ -23,6 +23,7 @@ export interface ProjectStatusResult {
   developerName: string | null;
   expectedDeliveryDate: string | null;
   overdueMilestones: Array<{ id: string; name: string; dueDate: string }>;
+  atRiskMilestones: Array<{ id: string; name: string; dueDate: string }>;
 }
 
 /**
@@ -34,10 +35,54 @@ export interface ProjectStatusResult {
  * empty results (never a 403/404), matching the "don't invent, don't
  * leak" behavior the system prompt already expects from tool results.
  */
-export function createAgentTools(ctx: AgentToolContext) {
+export interface AgentToolOptions {
+  /**
+   * The project id the caller is currently viewing (route's `body.projectId`),
+   * when known. When set, notifyProjectStakeholders uses this instead of
+   * trusting the model to retype the id on that call — otherwise a
+   * mistyped/hallucinated id on one tool call (but not another) in the same
+   * turn can make notifications silently fail for one audience while
+   * succeeding for another, on what is actually the same project.
+   */
+  boundProjectId?: string;
+}
+
+export function createAgentTools(ctx: AgentToolContext, opts: AgentToolOptions = {}) {
+  const listProjects = tool({
+    description:
+      "List projects the caller can see, with their id, name, current stage, and health. Call this first when the user refers to a project by name (or asks to list/browse projects) so you have its id for the other tools — none of them accept a project name directly.",
+    inputSchema: z.object({
+      query: z
+        .string()
+        .optional()
+        .describe("Optional case-insensitive substring to filter project names by."),
+    }),
+    execute: async ({ query }) => {
+      const accessible = await getAccessibleProjectIds(ctx);
+      const projects = await prisma.project.findMany({
+        where: {
+          ...(accessible !== "ALL" ? { id: { in: accessible } } : {}),
+          ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
+        },
+        select: { id: true, name: true, currentStage: true, health: true },
+        orderBy: { name: "asc" },
+        take: 50,
+      });
+      return {
+        count: projects.length,
+        projects: projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          currentStage: p.currentStage,
+          health: p.health,
+        })),
+      };
+    },
+  });
+
   const getProjectStatus = tool({
     description:
-      "Get a project's current stage, health, owner/analyst/developer, expected delivery date, and any overdue milestones.",
+      "Get a project's current stage, health, owner/analyst/developer, expected delivery date, and any overdue or at-risk (due within 3 days) milestones. Health is computed from these milestones and any active blockers — check atRiskMilestones/overdueMilestones before telling the user a health status looks unexplained.",
     inputSchema: z.object({
       projectId: z.string().describe("The project's id."),
     }),
@@ -62,6 +107,7 @@ export function createAgentTools(ctx: AgentToolContext) {
         developerName: null,
         expectedDeliveryDate: null,
         overdueMilestones: [],
+        atRiskMilestones: [],
       };
       if (!project || !isProjectParticipant(ctx, project)) {
         return notFound;
@@ -69,6 +115,9 @@ export function createAgentTools(ctx: AgentToolContext) {
 
       const overdueMilestones = project.milestones
         .filter((m) => isMilestoneOverdue(m))
+        .map((m) => ({ id: m.id, name: m.name, dueDate: m.dueDate.toISOString() }));
+      const atRiskMilestones = project.milestones
+        .filter((m) => isMilestoneAtRisk(m))
         .map((m) => ({ id: m.id, name: m.name, dueDate: m.dueDate.toISOString() }));
 
       return {
@@ -82,6 +131,7 @@ export function createAgentTools(ctx: AgentToolContext) {
         developerName: project.developer?.name ?? null,
         expectedDeliveryDate: project.expectedDeliveryDate.toISOString(),
         overdueMilestones,
+        atRiskMilestones,
       };
     },
   });
@@ -197,6 +247,76 @@ export function createAgentTools(ctx: AgentToolContext) {
     },
   });
 
+  const getProjectDependencies = tool({
+    description:
+      "Get a project's task/milestone dependency graph: which items block which. Use this to answer 'what's blocking X' or 'what does X depend on' questions.",
+    inputSchema: z.object({
+      projectId: z.string().describe("The project's id."),
+    }),
+    execute: async ({ projectId }) => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true, analystId: true, developerId: true, departmentId: true },
+      });
+      if (!project || !isProjectParticipant(ctx, project)) {
+        return { count: 0, edges: [] };
+      }
+
+      const edges = await prisma.itemDependency.findMany({
+        where: { projectId },
+        select: { dependentType: true, dependentId: true, dependsOnType: true, dependsOnId: true },
+      });
+      if (edges.length === 0) {
+        return { count: 0, edges: [] };
+      }
+
+      const idsByType = new Map<DependencyItemType, Set<string>>();
+      for (const edge of edges) {
+        for (const [type, id] of [
+          [edge.dependentType, edge.dependentId],
+          [edge.dependsOnType, edge.dependsOnId],
+        ] as const) {
+          const set = idsByType.get(type) ?? new Set<string>();
+          set.add(id);
+          idsByType.set(type, set);
+        }
+      }
+
+      const [milestones, tasks] = await Promise.all([
+        prisma.milestone.findMany({
+          where: { id: { in: [...(idsByType.get("MILESTONE") ?? [])] } },
+          select: { id: true, name: true, status: true },
+        }),
+        prisma.projectTask.findMany({
+          where: { id: { in: [...(idsByType.get("TASK") ?? [])] } },
+          select: { id: true, action: true, status: true },
+        }),
+      ]);
+      const label = new Map<string, { name: string; status: string }>();
+      for (const m of milestones) label.set(`MILESTONE:${m.id}`, { name: m.name, status: m.status });
+      for (const t of tasks) label.set(`TASK:${t.id}`, { name: t.action, status: t.status });
+
+      const describe = (type: DependencyItemType, id: string) =>
+        label.get(`${type}:${id}`) ?? { name: "(unknown item)", status: "UNKNOWN" };
+
+      return {
+        count: edges.length,
+        edges: edges.map((edge) => ({
+          dependent: {
+            type: edge.dependentType,
+            id: edge.dependentId,
+            ...describe(edge.dependentType, edge.dependentId),
+          },
+          dependsOn: {
+            type: edge.dependsOnType,
+            id: edge.dependsOnId,
+            ...describe(edge.dependsOnType, edge.dependsOnId),
+          },
+        })),
+      };
+    },
+  });
+
   const searchDocuments = tool({
     description:
       "Case-insensitive keyword search over document filenames and free-text notes (blocker descriptions, delay reason notes). NOTE: this is a plain text-contains search, not semantic/embedding search — it will miss paraphrases or synonyms of the query.",
@@ -299,7 +419,12 @@ export function createAgentTools(ctx: AgentToolContext) {
     description:
       "Send an email notifying people connected to a project about an update (e.g. it's paused, blocked, or its status changed). Only call this when the user explicitly asks to notify, email, or alert someone — never proactively just because you have news to share. `audience` picks who receives it: 'owner'/'analyst'/'developer' are the project's assigned people, 'team_lead' is the relevant AI team lead, 'management' is the Management group.",
     inputSchema: z.object({
-      projectId: z.string().describe("The project's id."),
+      projectId: z
+        .string()
+        .optional()
+        .describe(
+          "The project's id. Omit this if the user is currently viewing a specific project — it will be filled in automatically.",
+        ),
       message: z
         .string()
         .min(1)
@@ -309,7 +434,20 @@ export function createAgentTools(ctx: AgentToolContext) {
         .min(1)
         .describe("Who to notify. Ask the user to clarify if they haven't said who."),
     }),
-    execute: async ({ projectId, message, audience }) => {
+    execute: async ({ projectId: modelProjectId, message, audience }) => {
+      // Prefer the route-bound id (the project actually being viewed) over
+      // whatever the model typed, so a mistyped/hallucinated id can't cause
+      // this call to silently target a different project than a sibling
+      // call in the same turn.
+      const projectId = opts.boundProjectId ?? modelProjectId;
+      if (!projectId) {
+        return {
+          sent: false,
+          recipientCount: 0,
+          recipients: [],
+          reason: "No project specified.",
+        };
+      }
       const project = await prisma.project.findUnique({
         where: { id: projectId },
         include: { owner: true, analyst: true, developer: true },
@@ -377,10 +515,12 @@ export function createAgentTools(ctx: AgentToolContext) {
   });
 
   return {
+    listProjects,
     getProjectStatus,
     getProjectRaci: getProjectRaciTool,
     listOpenFlags,
     getProjectTimeline: getProjectTimelineTool,
+    getProjectDependencies,
     searchDocuments,
     notifyProjectStakeholders,
   };
