@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { cleanupFixtureOrg, createFixtureOrg, createFixtureProject } from "./setup-fixtures";
 
 // Per AGENTIC_DASHBOARD_PLAN.md Decision 3: the monitoring loop's rule-based
-// layer must not depend on llm.arahim.dev uptime. Stub the narration client
+// layer must not depend on LLM provider uptime. Stub the narration client
 // to simulate a failed/unreachable LLM call for the whole suite so this test
 // never makes a real network call and locks in the RULE_FALLBACK guarantee.
 vi.mock("@/lib/llm-client", () => ({

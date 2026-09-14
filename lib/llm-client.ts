@@ -4,44 +4,14 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, type LanguageModel } from "ai";
 
 /**
- * AGENTIC_DASHBOARD_PLAN.md "DECIDED — Tech stack": self-hosted vLLM at
- * https://llm.arahim.dev, OpenAI-compatible, no auth required. Model id is
- * "qwen3.6-35b-a3b" — lowercase, exact, confirmed via a live curl against
- * the real endpoint (the "Qwen3.6-35B-A3B-FP8" casing from an earlier draft
- * 404s). `apiKey` is a non-empty placeholder only — the SDK requires a
- * non-empty string even though the endpoint never checks it.
+ * Models tried in order for every LLM call in this app: gemini-3.1-flash-lite
+ * (behind GEMINI_API_KEY), then DeepSeek (an OpenAI-compatible endpoint,
+ * behind DEEPSEEK_API_KEY). Each tier is skipped when its required env var
+ * is absent. `primaryModel` (the first configured tier) is used directly by
+ * callers that need a single model, e.g. the streaming assistant route.
  */
-export const LLM_MODEL_ID = "qwen3.6-35b-a3b";
-
-const llmProvider = createOpenAI({
-  baseURL: process.env.LLM_BASE_URL ?? "https://llm.arahim.dev/v1",
-  apiKey: process.env.LLM_API_KEY ?? "unused-placeholder-key",
-});
-
-// `.chat(...)` is required here, not the bare `llmProvider(...)` call —
-// @ai-sdk/openai v2 defaults the bare call to OpenAI's newer Responses
-// API (POST /v1/responses). Confirmed via test/eval: this self-hosted
-// vLLM endpoint only implements the classic Chat Completions API
-// (/v1/chat/completions); its Responses-API shim 500s with a bare
-// `'role'` KeyError as soon as a tool result is sent back in a
-// follow-up turn (i.e. every multi-step tool-calling conversation).
-export const llmModel = llmProvider.chat(LLM_MODEL_ID);
-
-/**
- * Fallback providers used in order when the self-hosted vLLM endpoint
- * (llmModel) is unreachable or errors: gemini-2.5-flash, then
- * gemini-3.1-flash-lite (both behind GEMINI_API_KEY), then DeepSeek (an
- * OpenAI-compatible endpoint, behind DEEPSEEK_API_KEY). Each tier is
- * skipped when its required env var is absent; if every tier is skipped
- * or fails, generateFlagNarration resolves to RULE_FALLBACK instead of
- * throwing. Narration produced by any tier is still reported as source
- * "LLM" (not a separate value) since callers only distinguish
- * LLM-generated text from the templated RULE_FALLBACK text.
- */
-export const GEMINI_FALLBACK_MODEL_ID = "gemini-2.5-flash";
-export const GEMINI_FALLBACK_MODEL_ID_2 = "gemini-3.1-flash-lite";
-export const DEEPSEEK_FALLBACK_MODEL_ID =
-  process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
+export const GEMINI_MODEL_ID = "gemini-3.1-flash-lite";
+export const DEEPSEEK_MODEL_ID = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
 const googleProvider = process.env.GEMINI_API_KEY
   ? createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY })
@@ -54,11 +24,18 @@ const deepseekProvider = process.env.DEEPSEEK_API_KEY
     })
   : undefined;
 
-const fallbackModels: LanguageModel[] = [
-  googleProvider?.(GEMINI_FALLBACK_MODEL_ID),
-  googleProvider?.(GEMINI_FALLBACK_MODEL_ID_2),
-  deepseekProvider?.chat(DEEPSEEK_FALLBACK_MODEL_ID),
+export const models: LanguageModel[] = [
+  googleProvider?.(GEMINI_MODEL_ID),
+  deepseekProvider?.chat(DEEPSEEK_MODEL_ID),
 ].filter((model): model is Exclude<typeof model, undefined> => Boolean(model));
+
+/**
+ * Single model used by callers that make one model call rather than a
+ * fallback chain (e.g. streamText in the assistant route, which can't
+ * retry mid-stream). Undefined when neither GEMINI_API_KEY nor
+ * DEEPSEEK_API_KEY is set — callers must handle that case explicitly.
+ */
+export const primaryModel: LanguageModel | undefined = models[0];
 
 export interface FlagNarrationResult {
   text: string;
@@ -85,7 +62,7 @@ export async function generateFlagNarration(
   // waiting on it), so there's no reason not to give it real headroom.
   timeoutMs = 15000,
 ): Promise<FlagNarrationResult> {
-  for (const model of [llmModel, ...fallbackModels]) {
+  for (const model of models) {
     try {
       const { text } = await generateText({
         model,

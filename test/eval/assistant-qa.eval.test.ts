@@ -1,25 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { prisma } from "@/lib/prisma";
-import { llmModel } from "@/lib/llm-client";
+import { primaryModel } from "@/lib/llm-client";
 import { createAgentTools } from "@/lib/agent-tools";
 import { BASE_SYSTEM_PROMPT, ASSISTANT_MAX_STEPS } from "@/app/api/v1/assistant/route";
 import { cleanupFixtureOrg, createFixtureOrg, createFixtureProject } from "../integration/setup-fixtures";
 
 /**
  * Eval suite for the Q&A agentic assistant (AGENTIC_DASHBOARD_PLAN.md
- * "Group D"), run against the real self-hosted LLM (no stubbing) and
- * real fixture data. This is the suite that caught two production bugs
- * before this file existed:
- *  1. streamText/generateText defaults to stopWhen: stepCountIs(1), so
- *     the assistant never got a turn to read tool results and answer —
- *     every real question returned empty text. Fixed by passing
- *     stopWhen: stepCountIs(ASSISTANT_MAX_STEPS) (route + here).
- *  2. @ai-sdk/openai's bare provider call defaults to OpenAI's Responses
- *     API, which this vLLM endpoint doesn't implement correctly (500s on
- *     any follow-up turn with a tool result). Fixed via `.chat(modelId)`
- *     in lib/llm-client.ts.
- * Both fixes are exercised implicitly by every test below succeeding.
+ * "Group D"), run against a real LLM (no stubbing) and real fixture data.
+ * This is the suite that caught a production bug before this file
+ * existed: streamText/generateText defaults to stopWhen: stepCountIs(1),
+ * so the assistant never got a turn to read tool results and answer —
+ * every real question returned empty text. Fixed by passing
+ * stopWhen: stepCountIs(ASSISTANT_MAX_STEPS) (route + here). That fix is
+ * exercised implicitly by every test below succeeding.
  */
 
 async function askAgent(
@@ -42,8 +37,12 @@ async function askAgent(
 
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
 
+  if (!primaryModel) {
+    throw new Error("No LLM provider configured: set GEMINI_API_KEY or DEEPSEEK_API_KEY.");
+  }
+
   const result = await generateText({
-    model: llmModel,
+    model: primaryModel,
     system,
     messages,
     tools,

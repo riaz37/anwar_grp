@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/authz";
 import { requireProjectPermission } from "@/lib/project-authz";
 import { fail, handleRouteError } from "@/lib/api-response";
-import { llmModel } from "@/lib/llm-client";
+import { primaryModel } from "@/lib/llm-client";
 import { createAgentTools } from "@/lib/agent-tools";
 import {
   getConversationOwnedBy,
@@ -90,10 +90,14 @@ export async function POST(request: Request): Promise<Response> {
       ? `${BASE_SYSTEM_PROMPT}\n\n${identityLine}\n\nThe user is currently viewing project id "${body.projectId}" — scope your answers to this project unless they explicitly ask about the wider portfolio.`
       : `${BASE_SYSTEM_PROMPT}\n\n${identityLine}`;
 
+    if (!primaryModel) {
+      throw new Error("No LLM provider configured: set GEMINI_API_KEY or DEEPSEEK_API_KEY.");
+    }
+
     const tools = createAgentTools(user, { boundProjectId: body.projectId });
 
     const result = streamText({
-      model: llmModel,
+      model: primaryModel,
       system,
       messages: convertToModelMessages(body.messages),
       tools,
