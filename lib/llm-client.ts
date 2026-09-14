@@ -28,20 +28,37 @@ const llmProvider = createOpenAI({
 export const llmModel = llmProvider.chat(LLM_MODEL_ID);
 
 /**
- * Fallback provider used when the self-hosted vLLM endpoint (llmModel) is
- * unreachable or errors. GEMINI_API_KEY is required for this path — when
- * absent, generateFlagNarration skips straight to RULE_FALLBACK instead of
- * throwing. Narration produced this way is still reported as source "LLM"
- * (not a separate value) since callers only distinguish LLM-generated text
- * from the templated RULE_FALLBACK text.
+ * Fallback providers used in order when the self-hosted vLLM endpoint
+ * (llmModel) is unreachable or errors: gemini-2.5-flash, then
+ * gemini-3.1-flash-lite (both behind GEMINI_API_KEY), then DeepSeek (an
+ * OpenAI-compatible endpoint, behind DEEPSEEK_API_KEY). Each tier is
+ * skipped when its required env var is absent; if every tier is skipped
+ * or fails, generateFlagNarration resolves to RULE_FALLBACK instead of
+ * throwing. Narration produced by any tier is still reported as source
+ * "LLM" (not a separate value) since callers only distinguish
+ * LLM-generated text from the templated RULE_FALLBACK text.
  */
 export const GEMINI_FALLBACK_MODEL_ID = "gemini-2.5-flash";
+export const GEMINI_FALLBACK_MODEL_ID_2 = "gemini-3.1-flash-lite";
+export const DEEPSEEK_FALLBACK_MODEL_ID =
+  process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
-const fallbackModel: LanguageModel | undefined = process.env.GEMINI_API_KEY
-  ? createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY })(
-      GEMINI_FALLBACK_MODEL_ID,
-    )
+const googleProvider = process.env.GEMINI_API_KEY
+  ? createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY })
   : undefined;
+
+const deepseekProvider = process.env.DEEPSEEK_API_KEY
+  ? createOpenAI({
+      baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1",
+      apiKey: process.env.DEEPSEEK_API_KEY,
+    })
+  : undefined;
+
+const fallbackModels: LanguageModel[] = [
+  googleProvider?.(GEMINI_FALLBACK_MODEL_ID),
+  googleProvider?.(GEMINI_FALLBACK_MODEL_ID_2),
+  deepseekProvider?.chat(DEEPSEEK_FALLBACK_MODEL_ID),
+].filter((model): model is Exclude<typeof model, undefined> => Boolean(model));
 
 export interface FlagNarrationResult {
   text: string;
@@ -68,26 +85,17 @@ export async function generateFlagNarration(
   // waiting on it), so there's no reason not to give it real headroom.
   timeoutMs = 15000,
 ): Promise<FlagNarrationResult> {
-  try {
-    const { text } = await generateText({
-      model: llmModel,
-      prompt,
-      abortSignal: AbortSignal.timeout(timeoutMs),
-    });
-    return { text, source: "LLM" };
-  } catch {
-    if (!fallbackModel) {
-      return { text: "", source: "RULE_FALLBACK" };
-    }
+  for (const model of [llmModel, ...fallbackModels]) {
     try {
       const { text } = await generateText({
-        model: fallbackModel,
+        model,
         prompt,
         abortSignal: AbortSignal.timeout(timeoutMs),
       });
       return { text, source: "LLM" };
     } catch {
-      return { text: "", source: "RULE_FALLBACK" };
+      // try the next tier
     }
   }
+  return { text: "", source: "RULE_FALLBACK" };
 }
